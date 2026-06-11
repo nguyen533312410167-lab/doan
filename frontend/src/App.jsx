@@ -14,6 +14,7 @@ function PrivateRoute({ children }) {
 }
 
 function AppShell({ children }) {
+  
   const navigate = useNavigate();
 
   const logout = () => {
