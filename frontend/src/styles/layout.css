@@ -1,0 +1,140 @@
+.layout-master {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: row;
+}
+
+.layout-sider {
+  background: #001529 !important;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  color: white;
+  font-weight: bold;
+  font-size: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.layout-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.layout-header {
+  background: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  height: 64px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.toggle-mobile {
+  display: none !important;
+}
+
+.layout-main-content {
+  flex: 1;
+  overflow-y: auto;
+  background: #f5f5f5;
+}
+
+.mobile-drawer {
+  display: none !important;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .layout-sider {
+    display: none !important;
+  }
+
+  .toggle-desktop {
+    display: none !important;
+  }
+
+  .toggle-mobile {
+    display: inline-block !important;
+  }
+
+  .mobile-drawer {
+    display: block !important;
+  }
+
+  .layout-header {
+    padding: 0 12px;
+  }
+
+  .layout-master {
+    flex-direction: column;
+  }
+
+  .header-right span {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .layout-header {
+    padding: 0 8px;
+    height: 56px;
+  }
+
+  .layout-main-content {
+    padding-top: 8px !important;
+  }
+}
+
+/* Ant Design Table Responsive */
+.ant-table {
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .ant-table {
+    font-size: 12px;
+  }
+
+  .ant-table-cell {
+    padding: 8px !important;
+  }
+}
+
+/* Card Responsive */
+.ant-card {
+  margin-bottom: 16px;
+}
+
+/* Progress Bar */
+.ant-progress {
+  margin-bottom: 12px;
+}
+
+/* Statistic */
+.ant-statistic-content-value {
+  font-size: 24px;
+}
+
+@media (max-width: 768px) {
+  .ant-statistic-content-value {
+    font-size: 18px;
+  }
+}

@@ -12,6 +12,18 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [login, { loading, error }] = useMutation(LOGIN);
 
+  const useDemoAccount = () => {
+    // store demo token and basic demo user info locally for frontend-only demo
+    setToken("demo-token-123");
+    try {
+      localStorage.setItem(
+        "demo_user",
+        JSON.stringify({ username: "demo", email: "demo@example.com" })
+      );
+    } catch (e) {}
+    navigate("/dashboard", { replace: true });
+  };
+
   const onFinish = async (values) => {
     const result = await login({ variables: values });
     setToken(result.data.tokenAuth.token);
@@ -35,6 +47,9 @@ export default function LoginPage() {
             Đăng nhập
           </Button>
         </Form>
+        <Button style={{ marginTop: 12 }} block onClick={useDemoAccount}>
+          Dùng tài khoản demo
+        </Button>
         <Text>
           Chưa có tài khoản? <Link to="/register">Đăng ký</Link>
         </Text>
