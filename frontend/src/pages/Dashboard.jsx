@@ -105,7 +105,7 @@ export default function Dashboard() {
   if (alerts.length === 0) {
     alerts.push({
       type: "success",
-      message: "✅ Tình hình tài chính của bạn đang ổn định!",
+      message: " Tình hình tài chính của bạn đang ổn định!",
     });
   }
 
