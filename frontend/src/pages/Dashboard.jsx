@@ -1,4 +1,4 @@
-import { Row, Col, Statistic, Alert, Card, Space } from "antd";
+import { Row, Col, Statistic, Alert, Card, Space, Form, InputNumber, Button, Table, Divider } from "antd";
 import {
   ArrowUpOutlined,
   ArrowDownOutlined,
@@ -6,15 +6,19 @@ import {
 } from "@ant-design/icons";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { useState, useEffect } from "react";
+import dayjs from "dayjs";
 import mockData, { categoryMap } from "../data/mockData";
 
 export default function Dashboard() {
   // Load transactions from shared mockData (localStorage)
   const [transactions, setTransactions] = useState(mockData.loadTransactions());
 
-  const computeStats = (txs) => {
-    const income = txs.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
-    const expense = txs.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const [incomeInput, setIncomeInput] = useState(0);
+  const [historyRange, setHistoryRange] = useState(6);
+
+  const computeStats = (txs, incomeOverride = null) => {
+    const income = incomeOverride !== null ? incomeOverride : txs.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+    const expense = txs.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
     return {
       income,
       expense,
@@ -26,7 +30,7 @@ export default function Dashboard() {
 
   const buildExpenseByCategory = (txs) => {
     const map = {};
-    txs.filter(t => t.type === 'expense').forEach(t => {
+    txs.filter((t) => t.type === "expense").forEach((t) => {
       map[t.category] = (map[t.category] || 0) + t.amount;
     });
     const total = Object.values(map).reduce((s, v) => s + v, 0) || 1;
@@ -35,21 +39,47 @@ export default function Dashboard() {
 
   const expenseByCategory = buildExpenseByCategory(transactions);
 
-  const incomeVsExpense = [
-    { month: "Tháng 1", income: stats.income, expense: stats.expense },
-    { month: "Tháng 2", income: stats.income, expense: stats.expense },
-    { month: "Tháng 3", income: stats.income, expense: stats.expense },
-  ];
+  const buildMonthlyHistory = (txs, months = 6) => {
+    const end = dayjs();
+    const start = end.subtract(months - 1, "month");
+    const monthly = {};
+
+    for (let i = 0; i < months; i += 1) {
+      const month = start.add(i, "month");
+      const key = month.format("YYYY-MM");
+      monthly[key] = { month: month.format("MM/YYYY"), income: 0, expense: 0 };
+    }
+
+    txs.forEach((t) => {
+      const key = dayjs(t.date).format("YYYY-MM");
+      if (monthly[key]) {
+        monthly[key][t.type] += t.amount;
+      }
+    });
+
+    return Object.values(monthly);
+  };
+
+  const [monthlyHistory, setMonthlyHistory] = useState(buildMonthlyHistory(transactions, historyRange));
+
+  const incomeVsExpense = monthlyHistory;
+  const incomeHistoryTableData = monthlyHistory.map((item, index) => ({ key: index, ...item }));
 
   useEffect(() => {
     const onUpdate = () => {
       const tx = mockData.loadTransactions();
       setTransactions(tx);
-      setStats(computeStats(tx));
+      setStats(computeStats(tx, incomeInput || null));
+      setMonthlyHistory(buildMonthlyHistory(tx, historyRange));
     };
     window.addEventListener("transactions_updated", onUpdate);
     return () => window.removeEventListener("transactions_updated", onUpdate);
-  }, []);
+  }, [incomeInput, historyRange]);
+
+  useEffect(() => {
+    setStats(computeStats(transactions, incomeInput || null));
+    setMonthlyHistory(buildMonthlyHistory(transactions, historyRange));
+  }, [transactions, incomeInput, historyRange]);
 
   const COLORS = ["#1890ff", "#52c41a", "#faad14", "#f5222d"];
 
@@ -112,6 +142,46 @@ export default function Dashboard() {
   return (
     <div style={{ padding: "24px" }}>
       <h1>Dashboard</h1>
+
+      <Card style={{ marginBottom: 16 }}>
+        <Space wrap align="center" style={{ width: "100%", justifyContent: "space-between" }}>
+          <div>
+            <h3>Nhập thu nhập dùng cho so sánh</h3>
+            <Form layout="inline" onFinish={() => {}}>
+              <Form.Item label="Thu nhập tháng" style={{ marginBottom: 0 }}>
+                <InputNumber
+                  value={incomeInput}
+                  formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}
+                  parser={(value) => Number(value?.replace(/\./g, "") || 0)}
+                  onChange={(value) => setIncomeInput(value || 0)}
+                  min={0}
+                  style={{ width: 200 }}
+                />
+              </Form.Item>
+              <Form.Item label="Số tháng lịch sử" style={{ marginBottom: 0 }}>
+                <InputNumber
+                  min={3}
+                  max={12}
+                  value={historyRange}
+                  onChange={(value) => setHistoryRange(value || 6)}
+                  style={{ width: 120 }}
+                />
+              </Form.Item>
+              <Form.Item style={{ marginBottom: 0 }}>
+                <Button type="primary" onClick={() => {
+                  setStats(computeStats(transactions, incomeInput || null));
+                  setMonthlyHistory(buildMonthlyHistory(transactions, historyRange));
+                }}>
+                  Cập nhật
+                </Button>
+              </Form.Item>
+            </Form>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 14, color: "#888" }}>Lưu ý: nhập thu nhập để so sánh</div>
+          </div>
+        </Space>
+      </Card>
 
       {/* Statistics Cards */}
       <Row gutter={[16, 16]} style={{ marginBottom: "24px" }}>
@@ -212,6 +282,36 @@ export default function Dashboard() {
           </Card>
         </Col>
       </Row>
+
+      <Divider />
+
+      <Card style={{ marginTop: 24 }}>
+        <h3>Lịch sử Thu Nhập / Chi Tiêu ({historyRange} tháng)</h3>
+        <Table
+          dataSource={incomeHistoryTableData}
+          pagination={false}
+          columns={[
+            { title: "Tháng", dataIndex: "month", key: "month" },
+            {
+              title: "Thu nhập",
+              dataIndex: "income",
+              key: "income",
+              render: (value) => `${value.toLocaleString("vi-VN")} ₫`,
+            },
+            {
+              title: "Chi tiêu",
+              dataIndex: "expense",
+              key: "expense",
+              render: (value) => `${value.toLocaleString("vi-VN")} ₫`,
+            },
+            {
+              title: "Chênh lệch",
+              key: "balance",
+              render: (_, record) => `${(record.income - record.expense).toLocaleString("vi-VN")} ₫`,
+            },
+          ]}
+        />
+      </Card>
     </div>
   );
 }
