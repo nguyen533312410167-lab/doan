@@ -4,6 +4,7 @@ import RegisterPage from "./pages/RegisterPage.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Transactions from "./pages/Transactions.jsx";
 import Goals from "./pages/Goals.jsx";
+import ThemGiaoDich from "./pages/ThemGiaoDich.jsx";
 import ProtectedLayout from "./layouts/ProtectedLayout.jsx";
 import { isAuthenticated } from "./lib/auth.js";
 
@@ -33,6 +34,14 @@ export default function App() {
         element={
           <ProtectedLayout>
             <Goals />
+          </ProtectedLayout>
+        }
+      />
+      <Route
+        path="/them-giao-dich"
+        element={
+          <ProtectedLayout>
+            <ThemGiaoDich />
           </ProtectedLayout>
         }
       />
