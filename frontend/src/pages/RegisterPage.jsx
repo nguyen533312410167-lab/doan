@@ -39,10 +39,30 @@ export default function RegisterPage() {
   const errMsg = getErrorMessage();
 
   return (
-    <div className="auth-wrap">
-      <div className="auth-panel">
-        <Title level={2}>Đăng ký tài khoản</Title>
-        <Text type="secondary">Tạo tài khoản người dùng mới.</Text>
+    <div
+      className="auth-wrap"
+      style={{
+        minHeight: "100vh",
+        width: "100%",
+        background:
+          "linear-gradient(135deg, #020617 0%, #031B10 30%, #052E16 60%, #04180D 100%)",
+      }}
+    >
+      <div
+        className="auth-panel"
+        style={{
+          background: "rgba(8,22,15,0.95)",
+          border: "1px solid #1F5132",
+        }}
+      >
+        <Title level={2} style={{ color: "#FFFFFF" }}>
+          Đăng ký tài khoản
+        </Title>
+
+        <Text style={{ color: "rgba(255,255,255,0.8)" }}>
+          Tạo tài khoản người dùng mới.
+        </Text>
+
         {errMsg && (
           <Alert
             className="form-alert"
@@ -51,45 +71,87 @@ export default function RegisterPage() {
             message={errMsg}
           />
         )}
+
         <Form layout="vertical" onFinish={onFinish} autoComplete="off">
           <Form.Item
             name="username"
-            label="Tên đăng nhập"
+            label={<span style={{ color: "#FFFFFF" }}>Tên đăng nhập</span>}
             rules={[{ required: true, message: "Nhập tên đăng nhập" }]}
           >
-            <Input />
+            <Input
+              style={{
+                background: "#102019",
+                borderColor: "#2D5A3D",
+                color: "#FFFFFF",
+              }}
+            />
           </Form.Item>
+
           <Form.Item
             name="email"
-            label="Email"
+            label={<span style={{ color: "#FFFFFF" }}>Email</span>}
             rules={[
               { required: true, message: "Nhập email" },
               { type: "email", message: "Email không hợp lệ" },
             ]}
           >
-            <Input />
+            <Input
+              style={{
+                background: "#102019",
+                borderColor: "#2D5A3D",
+                color: "#FFFFFF",
+              }}
+            />
           </Form.Item>
+
           <div className="form-grid">
-            <Form.Item name="firstName" label="Tên">
-              <Input />
+            <Form.Item
+              name="firstName"
+              label={<span style={{ color: "#FFFFFF" }}>Tên</span>}
+            >
+              <Input
+                style={{
+                  background: "#102019",
+                  borderColor: "#2D5A3D",
+                  color: "#FFFFFF",
+                }}
+              />
             </Form.Item>
-            <Form.Item name="lastName" label="Họ">
-              <Input />
+
+            <Form.Item
+              name="lastName"
+              label={<span style={{ color: "#FFFFFF" }}>Họ</span>}
+            >
+              <Input
+                style={{
+                  background: "#102019",
+                  borderColor: "#2D5A3D",
+                  color: "#FFFFFF",
+                }}
+              />
             </Form.Item>
           </div>
+
           <Form.Item
             name="password"
-            label="Mật khẩu"
+            label={<span style={{ color: "#FFFFFF" }}>Mật khẩu</span>}
             rules={[
               { required: true, message: "Nhập mật khẩu" },
               { min: 8, message: "Tối thiểu 8 ký tự" },
             ]}
           >
-            <Input.Password />
+            <Input.Password
+              style={{
+                background: "#102019",
+                borderColor: "#2D5A3D",
+                color: "#FFFFFF",
+              }}
+            />
           </Form.Item>
+
           <Form.Item
             name="confirmPassword"
-            label="Xác nhận mật khẩu"
+            label={<span style={{ color: "#FFFFFF" }}>Xác nhận mật khẩu</span>}
             dependencies={["password"]}
             rules={[
               { required: true, message: "Xác nhận mật khẩu" },
@@ -103,14 +165,36 @@ export default function RegisterPage() {
               }),
             ]}
           >
-            <Input.Password />
+            <Input.Password
+              style={{
+                background: "#102019",
+                borderColor: "#2D5A3D",
+                color: "#FFFFFF",
+              }}
+            />
           </Form.Item>
-          <Button type="primary" htmlType="submit" loading={loading} block>
+
+          <Button
+            type="primary"
+            htmlType="submit"
+            loading={loading}
+            block
+            style={{
+              background: "#22C55E",
+              borderColor: "#22C55E",
+              color: "#FFFFFF",
+              fontWeight: 600,
+            }}
+          >
             Đăng ký
           </Button>
         </Form>
-        <Text>
-          Đã có tài khoản? <Link to="/login">Đăng nhập</Link>
+
+        <Text style={{ color: "#FFFFFF" }}>
+          Đã có tài khoản?{" "}
+          <Link to="/login" style={{ color: "#4ADE80" }}>
+            Đăng nhập
+          </Link>
         </Text>
       </div>
     </div>
