@@ -1,7 +1,5 @@
-import { Row, Col, Statistic, Alert, Card, Space, Form, InputNumber, Button, Table, Divider } from "antd";
+import { Row, Col, Statistic, Alert, Card, Space, Form, InputNumber, Table, Divider, DatePicker } from "antd";
 import {
-  ArrowUpOutlined,
-  ArrowDownOutlined,
   DollarOutlined,
 } from "@ant-design/icons";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
@@ -10,14 +8,21 @@ import dayjs from "dayjs";
 import mockData, { categoryMap } from "../data/mockData";
 
 export default function Dashboard() {
-  // Load transactions from shared mockData (localStorage)
   const [transactions, setTransactions] = useState(mockData.loadTransactions());
 
-  const [incomeInput, setIncomeInput] = useState(0);
-  const [historyRange, setHistoryRange] = useState(6);
+  // Nhập thu nhập - mặc định chạy thời gian thực (tháng hiện tại)
+  const currentMonth = dayjs();
+  const [incomeInput, setIncomeInput] = useState(null);
+  const [historyMonth, setHistoryMonth] = useState(dayjs());
 
-  const computeStats = (txs, incomeOverride = null) => {
-    const income = incomeOverride !== null ? incomeOverride : txs.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+  // Lọc giao dịch theo tháng hiện tại
+  const transactionsByMonth = transactions.filter((t) => {
+    const txMonth = dayjs(t.date).format("YYYY-MM");
+    return txMonth === currentMonth.format("YYYY-MM");
+  });
+
+  const computeStats = (txs, incomeOverride) => {
+    const income = incomeOverride != null ? incomeOverride : txs.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
     const expense = txs.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
     return {
       income,
@@ -26,7 +31,7 @@ export default function Dashboard() {
     };
   };
 
-  const [stats, setStats] = useState(computeStats(transactions));
+  const [stats, setStats] = useState(computeStats(transactionsByMonth, null));
 
   const buildExpenseByCategory = (txs) => {
     const map = {};
@@ -37,49 +42,35 @@ export default function Dashboard() {
     return Object.entries(map).map(([key, value]) => ({ name: categoryMap[key] || key, value, percentage: (value / total) * 100 }));
   };
 
-  const expenseByCategory = buildExpenseByCategory(transactions);
+  const expenseByCategory = buildExpenseByCategory(transactionsByMonth);
 
-  const buildMonthlyHistory = (txs, months = 6) => {
-    const end = dayjs();
-    const start = end.subtract(months - 1, "month");
-    const monthly = {};
-
-    for (let i = 0; i < months; i += 1) {
-      const month = start.add(i, "month");
-      const key = month.format("YYYY-MM");
-      monthly[key] = { month: month.format("MM/YYYY"), income: 0, expense: 0 };
-    }
-
-    txs.forEach((t) => {
-      const key = dayjs(t.date).format("YYYY-MM");
-      if (monthly[key]) {
-        monthly[key][t.type] += t.amount;
-      }
-    });
-
-    return Object.values(monthly);
-  };
-
-  const [monthlyHistory, setMonthlyHistory] = useState(buildMonthlyHistory(transactions, historyRange));
-
-  const incomeVsExpense = monthlyHistory;
-  const incomeHistoryTableData = monthlyHistory.map((item, index) => ({ key: index, ...item }));
+  // Chỉ lấy dữ liệu 1 tháng cho lịch sử
+  const singleMonthData = (() => {
+    const key = historyMonth.format("YYYY-MM");
+    const txMonth = transactions.filter((t) => dayjs(t.date).format("YYYY-MM") === key);
+    const income = txMonth.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+    const expense = txMonth.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+    return {
+      key: key,
+      month: historyMonth.format("MM/YYYY"),
+      income,
+      expense,
+      balance: income - expense,
+    };
+  })();
 
   useEffect(() => {
     const onUpdate = () => {
       const tx = mockData.loadTransactions();
       setTransactions(tx);
-      setStats(computeStats(tx, incomeInput || null));
-      setMonthlyHistory(buildMonthlyHistory(tx, historyRange));
     };
     window.addEventListener("transactions_updated", onUpdate);
     return () => window.removeEventListener("transactions_updated", onUpdate);
-  }, [incomeInput, historyRange]);
+  }, []);
 
   useEffect(() => {
-    setStats(computeStats(transactions, incomeInput || null));
-    setMonthlyHistory(buildMonthlyHistory(transactions, historyRange));
-  }, [transactions, incomeInput, historyRange]);
+    setStats(computeStats(transactionsByMonth, incomeInput));
+  }, [transactionsByMonth, incomeInput]);
 
   const COLORS = ["#1890ff", "#52c41a", "#faad14", "#f5222d"];
 
@@ -95,7 +86,8 @@ export default function Dashboard() {
   }
 
   // Luật 2: Nếu chi phí ăn uống > 40%
-  if (expenseByCategory[0] && expenseByCategory[0].percentage > 40) {
+  const eatingCategory = expenseByCategory.find((c) => c.name === "Ăn uống");
+  if (eatingCategory && eatingCategory.percentage > 40) {
     alerts.push({
       type: "warning",
       message:
@@ -104,7 +96,8 @@ export default function Dashboard() {
   }
 
   // Luật 3: Nếu chi phí giải trí > 25%
-  if (expenseByCategory[1] && expenseByCategory[1].percentage > 25) {
+  const entertainmentCategory = expenseByCategory.find((c) => c.name === "Giải trí");
+  if (entertainmentCategory && entertainmentCategory.percentage > 25) {
     alerts.push({
       type: "warning",
       message:
@@ -113,7 +106,7 @@ export default function Dashboard() {
   }
 
   // Luật 4: Nếu tổng tiền tiết kiệm < 10% thu nhập
-  const savingsPercentage = (stats.balance / stats.income) * 100;
+  const savingsPercentage = stats.income > 0 ? (stats.balance / stats.income) * 100 : 0;
   if (savingsPercentage < 10) {
     alerts.push({
       type: "warning",
@@ -123,7 +116,6 @@ export default function Dashboard() {
   }
 
   // Luật 5: Nếu mục tiêu tiết kiệm hoàn thành
-  // (Placeholder - logic thực tế từ Goals)
   const goalCompleted = false;
   if (goalCompleted) {
     alerts.push({
@@ -143,42 +135,25 @@ export default function Dashboard() {
     <div style={{ padding: "24px" }}>
       <h1>Dashboard</h1>
 
+      {/* Nhập Thu Nhập - thời gian thực */}
       <Card style={{ marginBottom: 16 }}>
         <Space wrap align="center" style={{ width: "100%", justifyContent: "space-between" }}>
           <div>
-            <h3>Nhập thu nhập dùng cho so sánh</h3>
+            <h3>Nhập Thu Nhập</h3>
             <Form layout="inline" onFinish={() => {}}>
-              <Form.Item label="Thu nhập tháng" style={{ marginBottom: 0 }}>
+              <Form.Item label={`Thu nhập tháng ${currentMonth.format("MM/YYYY")}`} style={{ marginBottom: 0 }}>
                 <InputNumber
                   value={incomeInput}
-                  formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}
-                  parser={(value) => Number(value?.replace(/\./g, "") || 0)}
-                  onChange={(value) => setIncomeInput(value || 0)}
+                  placeholder="Nhập số tiền"
+                  onChange={(value) => setIncomeInput(value)}
                   min={0}
                   style={{ width: 200 }}
                 />
               </Form.Item>
-              <Form.Item label="Số tháng lịch sử" style={{ marginBottom: 0 }}>
-                <InputNumber
-                  min={3}
-                  max={12}
-                  value={historyRange}
-                  onChange={(value) => setHistoryRange(value || 6)}
-                  style={{ width: 120 }}
-                />
-              </Form.Item>
-              <Form.Item style={{ marginBottom: 0 }}>
-                <Button type="primary" onClick={() => {
-                  setStats(computeStats(transactions, incomeInput || null));
-                  setMonthlyHistory(buildMonthlyHistory(transactions, historyRange));
-                }}>
-                  Cập nhật
-                </Button>
-              </Form.Item>
             </Form>
           </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 14, color: "#888" }}>Lưu ý: nhập thu nhập để so sánh</div>
+          <div style={{ textAlign: "right", fontSize: 14, color: "#888" }}>
+            Nhập thu nhập tháng {currentMonth.format("MM/YYYY")} để so sánh
           </div>
         </Space>
       </Card>
@@ -267,11 +242,16 @@ export default function Dashboard() {
 
         <Col xs={24} lg={12}>
           <Card>
-            <h3>So Sánh Thu Nhập và Chi Tiêu</h3>
+            <h3>So Sánh Thu Nhập và Chi Tiêu - Tháng {currentMonth.format("MM/YYYY")}</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={incomeVsExpense}>
+              <BarChart
+                data={[
+                  { name: "Thu nhập", income: stats.income, expense: 0 },
+                  { name: "Chi tiêu", income: 0, expense: stats.expense },
+                ]}
+              >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
+                <XAxis dataKey="name" />
                 <YAxis />
                 <Tooltip formatter={(value) => `${value.toLocaleString("vi-VN")} ₫`} />
                 <Legend />
@@ -285,10 +265,21 @@ export default function Dashboard() {
 
       <Divider />
 
+      {/* Lịch sử Thu nhập / Chi tiêu */}
       <Card style={{ marginTop: 24 }}>
-        <h3>Lịch sử Thu Nhập / Chi Tiêu ({historyRange} tháng)</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h3 style={{ margin: 0 }}>Lịch sử Thu Nhập / Chi Tiêu</h3>
+          <DatePicker
+            picker="month"
+            value={historyMonth}
+            onChange={(date) => date && setHistoryMonth(date)}
+            format="MM/YYYY"
+            allowClear={false}
+            style={{ width: 140 }}
+          />
+        </div>
         <Table
-          dataSource={incomeHistoryTableData}
+          dataSource={[singleMonthData]}
           pagination={false}
           columns={[
             { title: "Tháng", dataIndex: "month", key: "month" },
