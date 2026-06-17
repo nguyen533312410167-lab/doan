@@ -1,87 +1,112 @@
-import { Table, Button, Modal, Form, Input, Select, DatePicker, Space, Row, Col, Card } from "antd";
+import { Table, Button, Modal, Form, Input, Select, DatePicker, Space, Row, Col, Card, message } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useMutation, useQuery } from "@apollo/client";
 import dayjs from "dayjs";
-import mockData, { categories } from "../data/mockData";
-
-const categoryMap = mockData.categoryMap;
+import { TRANSACTIONS, CATEGORIES, CREATE_TRANSACTION, UPDATE_TRANSACTION, DELETE_TRANSACTION } from "../graphql/transactions.js";
 
 export default function Transactions() {
-  const [transactions, setTransactions] = useState(mockData.loadTransactions());
-
-  useEffect(() => {
-    const onUpdate = () => setTransactions(mockData.loadTransactions());
-    window.addEventListener("transactions_updated", onUpdate);
-    return () => window.removeEventListener("transactions_updated", onUpdate);
-  }, []);
-
+  const [messageApi, contextHolder] = message.useMessage();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingKey, setEditingKey] = useState(null);
+  const [editingId, setEditingId] = useState(null);
   const [form] = Form.useForm();
   const [filterType, setFilterType] = useState("all");
   const [searchText, setSearchText] = useState("");
 
+  const { data: catData } = useQuery(CATEGORIES);
+  const categories = catData?.categories || [];
+
+  const [selectedType, setSelectedType] = useState(null);
+
+  const { data: txnData, loading, refetch } = useQuery(TRANSACTIONS, {
+    variables: { search: searchText || undefined },
+    fetchPolicy: "network-only",
+  });
+  const transactions = txnData?.transactions || [];
+
+  const [createTxn] = useMutation(CREATE_TRANSACTION, {
+    onCompleted: () => { refetch(); messageApi.success("Đã thêm giao dịch"); },
+    onError: (err) => messageApi.error(err.message),
+  });
+  const [updateTxn] = useMutation(UPDATE_TRANSACTION, {
+    onCompleted: () => { refetch(); messageApi.success("Đã cập nhật giao dịch"); },
+    onError: (err) => messageApi.error(err.message),
+  });
+  const [deleteTxn] = useMutation(DELETE_TRANSACTION, {
+    onCompleted: () => { refetch(); messageApi.success("Đã xóa giao dịch"); },
+    onError: (err) => messageApi.error(err.message),
+  });
+
+  const { Option } = Select;
+
   const handleAdd = () => {
-    setEditingKey(null);
+    setEditingId(null);
     form.resetFields();
     setIsModalOpen(true);
   };
 
   const handleEdit = (record) => {
-    setEditingKey(record.key);
+    setEditingId(record.id);
     form.setFieldsValue({
-      ...record,
+      type: record.type,
+      amount: parseFloat(record.amount),
+      categoryId: record.category?.id || undefined,
+      note: record.note,
       date: dayjs(record.date),
     });
     setIsModalOpen(true);
   };
 
-  const handleDelete = (key) => {
-    setTransactions(transactions.filter((t) => t.key !== key));
+  const handleDelete = (id) => {
+    Modal.confirm({
+      title: "Xóa giao dịch?",
+      okText: "Xóa",
+      okButtonProps: { danger: true },
+      cancelText: "Hủy",
+      onOk: async () => {
+        await deleteTxn({ variables: { id } });
+      },
+    });
   };
 
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
-      if (editingKey !== null) {
-        const updated = transactions.map((t) =>
-          t.key === editingKey
-            ? {
-                ...t,
-                ...values,
-                date: values.date.format("YYYY-MM-DD"),
-                key: editingKey,
-              }
-            : t
-        );
-        setTransactions(updated);
-        mockData.saveTransactions(updated);
+      const variables = {
+        transactionType: values.type,
+        amount: String(values.amount),
+        date: values.date.format("YYYY-MM-DD"),
+        categoryId: values.categoryId || undefined,
+        note: values.note || "",
+      };
+
+      if (editingId !== null) {
+        await updateTxn({ variables: { id: editingId, ...variables } });
       } else {
-        const nextKey = Math.max(0, ...transactions.map((t) => t.key)) + 1;
-        const created = {
-          ...values,
-          date: values.date.format("YYYY-MM-DD"),
-          key: nextKey,
-        };
-        const updated = [...transactions, created];
-        setTransactions(updated);
-        mockData.saveTransactions(updated);
+        await createTxn({ variables });
       }
       setIsModalOpen(false);
       form.resetFields();
     } catch (error) {
-      console.error("Validation failed:", error);
+      if (error.errorFields) return; // validation failed
+      console.error("Save failed:", error);
     }
   };
 
-  const filteredTransactions = transactions.filter((t) => {
-    const typeMatch =
-      filterType === "all" || t.type === filterType;
-    const searchMatch =
-      t.note.toLowerCase().includes(searchText.toLowerCase()) ||
-      categoryMap[t.category]?.toLowerCase().includes(searchText.toLowerCase());
-    return typeMatch && searchMatch;
-  });
+  const filteredTransactions = searchText
+    ? transactions.filter((t) => {
+        const text = searchText.toLowerCase();
+        return (
+          (t.note || "").toLowerCase().includes(text) ||
+          (t.categoryName || "").toLowerCase().includes(text)
+        );
+      })
+    : transactions;
+
+  // Filter for type display
+  const displayTransactions = filterType === "all"
+    ? filteredTransactions
+    : filteredTransactions.filter(t => t.type === filterType);
 
   const columns = [
     {
@@ -93,9 +118,9 @@ export default function Transactions() {
     },
     {
       title: "Danh Mục",
-      dataIndex: "category",
-      key: "category",
-      render: (category) => categoryMap[category] || category,
+      dataIndex: "categoryName",
+      key: "categoryName",
+      render: (name) => name || "Khác",
     },
     {
       title: "Ghi Chú",
@@ -111,15 +136,16 @@ export default function Transactions() {
         { text: "Thu nhập", value: "income" },
         { text: "Chi tiêu", value: "expense" },
       ],
+      onFilter: (value, record) => record.type === value,
     },
     {
       title: "Số Tiền",
       dataIndex: "amount",
       key: "amount",
-      sorter: (a, b) => a.amount - b.amount,
+      sorter: (a, b) => parseFloat(a.amount) - parseFloat(b.amount),
       render: (amount, record) => (
         <span style={{ color: record.type === "income" ? "#52c41a" : "#f5222d" }}>
-          {record.type === "income" ? "+" : "-"}{amount.toLocaleString("vi-VN")} ₫
+          {record.type === "income" ? "+" : "-"}{parseFloat(amount).toLocaleString("vi-VN")} ₫
         </span>
       ),
     },
@@ -128,22 +154,8 @@ export default function Transactions() {
       key: "action",
       render: (_, record) => (
         <Space>
-          <Button
-            type="primary"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            Sửa
-          </Button>
-          <Button
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            onClick={() => handleDelete(record.key)}
-          >
-            Xóa
-          </Button>
+          <Button type="primary" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>Sửa</Button>
+          <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)}>Xóa</Button>
         </Space>
       ),
     },
@@ -151,6 +163,7 @@ export default function Transactions() {
 
   return (
     <div style={{ padding: "24px" }}>
+      {contextHolder}
       <h1>Quản Lý Giao Dịch</h1>
 
       <Card style={{ marginBottom: "16px" }}>
@@ -160,6 +173,7 @@ export default function Transactions() {
               placeholder="Tìm kiếm ghi chú hoặc danh mục"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
+              onSearch={() => refetch()}
             />
           </Col>
           <Col xs={24} sm={12} md={6}>
@@ -175,33 +189,34 @@ export default function Transactions() {
             />
           </Col>
           <Col xs={24} sm={12} md={12} style={{ textAlign: "right" }}>
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-              Thêm Giao Dịch
-            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>Thêm Giao Dịch</Button>
           </Col>
         </Row>
 
         <Table
           columns={columns}
-          dataSource={filteredTransactions}
+          dataSource={displayTransactions}
+          rowKey="id"
+          loading={loading}
           pagination={{ pageSize: 10, showSizeChanger: true }}
           scroll={{ x: 768 }}
         />
       </Card>
 
       <Modal
-        title={editingKey !== null ? "Sửa Giao Dịch" : "Thêm Giao Dịch"}
+        title={editingId !== null ? "Sửa Giao Dịch" : "Thêm Giao Dịch"}
         open={isModalOpen}
         onOk={handleSave}
         onCancel={() => setIsModalOpen(false)}
+        destroyOnClose
       >
         <Form form={form} layout="vertical">
-          <Form.Item
-            label="Loại Giao Dịch"
-            name="type"
-            rules={[{ required: true, message: "Chọn loại giao dịch" }]}
-          >
+          <Form.Item label="Loại Giao Dịch" name="type" rules={[{ required: true, message: "Chọn loại giao dịch" }]}>
             <Select
+              onChange={(value) => {
+                setSelectedType(value);
+                form.setFieldsValue({ categoryId: undefined });
+              }}
               options={[
                 { label: "Thu nhập", value: "income" },
                 { label: "Chi tiêu", value: "expense" },
@@ -209,35 +224,29 @@ export default function Transactions() {
             />
           </Form.Item>
 
-          <Form.Item
-            label="Số Tiền"
-            name="amount"
-            rules={[{ required: true, message: "Nhập số tiền" }]}
-          >
+          <Form.Item label="Số Tiền" name="amount" rules={[{ required: true, message: "Nhập số tiền" }]}>
             <Input type="number" placeholder="0" min={0} />
           </Form.Item>
 
-          <Form.Item
-            label="Danh Mục"
-            name="category"
-            rules={[{ required: true, message: "Chọn danh mục" }]}
-          >
-            <Select options={categories} />
+          <Form.Item label="Danh Mục" name="categoryId">
+            <Select
+              placeholder="Chọn danh mục"
+              allowClear
+              options={
+                selectedType
+                  ? categories
+                      .filter(c => c.type === selectedType)
+                      .map(c => ({ value: c.id, label: c.nameVi || c.name }))
+                  : categories.map(c => ({ value: c.id, label: c.nameVi || c.name }))
+              }
+            />
           </Form.Item>
 
-          <Form.Item
-            label="Ngày"
-            name="date"
-            rules={[{ required: true, message: "Chọn ngày" }]}
-          >
-            <DatePicker format="DD/MM/YYYY" />
+          <Form.Item label="Ngày" name="date" rules={[{ required: true, message: "Chọn ngày" }]}>
+            <DatePicker format="DD/MM/YYYY" style={{ width: "100%" }} />
           </Form.Item>
 
-          <Form.Item
-            label="Ghi Chú"
-            name="note"
-            rules={[{ required: true, message: "Nhập ghi chú" }]}
-          >
+          <Form.Item label="Ghi Chú" name="note">
             <Input placeholder="Ghi chú về giao dịch" />
           </Form.Item>
         </Form>

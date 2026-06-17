@@ -6,6 +6,7 @@ import {
   DashboardOutlined,
   SwapOutlined,
   BankOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@apollo/client";
@@ -62,8 +63,19 @@ export default function LayoutMaster({ children }) {
     },
   ];
 
+  const handleNavigateAccounts = () => {
+    navigate("/accounts");
+    setDrawerOpen(false);
+  };
+
   const accountMenu = {
     items: [
+      {
+        label: "Tài khoản",
+        key: "accounts",
+        icon: <UserOutlined />,
+        onClick: handleNavigateAccounts,
+      },
       {
         label: "Đăng xuất",
         key: "logout",
@@ -129,7 +141,7 @@ export default function LayoutMaster({ children }) {
           <div className="header-right">
             <Dropdown menu={accountMenu} trigger={["click"]}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                <Avatar icon={<DashboardOutlined />} />
+                <Avatar src={data?.me?.profile?.avatarUrl} icon={<UserOutlined />} />
                 <span>{username}</span>
               </div>
             </Dropdown>

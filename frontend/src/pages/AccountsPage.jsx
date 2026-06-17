@@ -6,6 +6,7 @@ import {
   PlusOutlined,
   ReloadOutlined,
   UploadOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import {
   Alert,
@@ -48,7 +49,7 @@ export default function AccountsPage() {
   const [createUser, createState] = useMutation(CREATE_USER, { refetchQueries: ["Users"] });
   const [updateUser, updateState] = useMutation(UPDATE_USER, { refetchQueries: ["Users", "Me"] });
   const [updateMe, updateMeState] = useMutation(UPDATE_ME, { refetchQueries: ["Me"] });
-  const [uploadAvatar] = useMutation(UPLOAD_AVATAR, { refetchQueries: ["Users", "Me"] });
+  const [uploadAvatar, uploadAvatarState] = useMutation(UPLOAD_AVATAR, { refetchQueries: ["Users", "Me"] });
   const [deleteUser] = useMutation(DELETE_USER, { refetchQueries: ["Users"] });
 
   const me = meQuery.data?.me;
@@ -148,8 +149,12 @@ export default function AccountsPage() {
   };
 
   const handleUploadAvatar = async (file, userId) => {
-    await uploadAvatar({ variables: { file, userId } });
-    messageApi.success("Đã upload avatar");
+    try {
+      await uploadAvatar({ variables: { file, userId } });
+      messageApi.success("Đã upload avatar");
+    } catch (err) {
+      messageApi.error(err.message || "Upload avatar thất bại");
+    }
   };
 
   const confirmDelete = (user) => {
@@ -178,19 +183,26 @@ export default function AccountsPage() {
       {contextHolder}
       <section className="page-panel">
         <div className="section-head">
-          <div>
-            <Title level={3}>Hồ sơ của tôi</Title>
-            <Text type="secondary">{me?.username}</Text>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <div>
+              <Title level={3} style={{ margin: 0 }}>Hồ sơ của tôi</Title>
+              <Text type="secondary">{me?.username}</Text>
+            </div>
           </div>
-          <Upload
-            showUploadList={false}
-            beforeUpload={(file) => {
-              handleUploadAvatar(file, me.id);
-              return false;
-            }}
-          >
-            <Button icon={<UploadOutlined />}>Upload avatar</Button>
-          </Upload>
+          <Space direction="vertical" align="center" size="small">
+            <Avatar size={80} src={me?.profile?.avatarUrl} icon={<UserOutlined />} />
+            <Upload
+              showUploadList={false}
+              beforeUpload={(file) => {
+                handleUploadAvatar(file, me.id);
+                return false;
+              }}
+            >
+              <Button icon={<UploadOutlined />} loading={uploadAvatarState.loading}>
+                {me?.profile?.avatarUrl ? "Đổi avatar" : "Upload avatar"}
+              </Button>
+            </Upload>
+          </Space>
         </div>
         <Form
           form={profileForm}
@@ -255,12 +267,7 @@ export default function AccountsPage() {
           <Table rowKey="id" columns={columns} dataSource={users} loading={usersQuery.loading} scroll={{ x: 900 }} />
         </section>
       ) : (
-        <Alert
-          type="info"
-          showIcon
-          message="Tài khoản hiện tại không có quyền staff nên chỉ xem và cập nhật hồ sơ cá nhân."
-        />
-      )}
+        null )}
 
       <Modal
         title={isCreateOpen ? "Thêm user" : `Cập nhật ${editingUser?.username || ""}`}

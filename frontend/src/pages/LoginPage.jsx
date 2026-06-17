@@ -1,4 +1,4 @@
-import { useMutation } from "@apollo/client";
+import { useMutation, useApolloClient } from "@apollo/client";
 import { LockOutlined, UserOutlined } from "@ant-design/icons";
 import { Alert, Button, Form, Input, Typography } from "antd";
 import { Link, useNavigate } from "react-router-dom";
@@ -10,24 +10,14 @@ const { Title, Text } = Typography;
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const client = useApolloClient();
   const [login, { loading, error }] = useMutation(LOGIN);
-
-  const useDemoAccount = () => {
-    // store demo token and basic demo user info locally for frontend-only demo
-    setToken("demo-token-123");
-    try {
-      localStorage.setItem(
-        "demo_user",
-        JSON.stringify({ username: "demo", email: "demo@example.com" })
-      );
-    } catch (e) {}
-    navigate("/dashboard", { replace: true });
-  };
 
   const onFinish = async (values) => {
     const result = await login({ variables: values });
     setToken(result.data.tokenAuth.token);
-    navigate("/accounts", { replace: true });
+    await client.resetStore();
+    navigate("/dashboard", { replace: true });
   };
 
  return (
@@ -117,19 +107,6 @@ export default function LoginPage() {
           Đăng nhập
         </Button>
       </Form>
-
-      <Button
-        style={{
-          marginTop: 12,
-          background: "#16231A",
-          borderColor: "#284333",
-          color: "#E2E8F0",
-        }}
-        block
-        onClick={useDemoAccount}
-      >
-        Dùng tài khoản demo
-      </Button>
 
       <div style={{ marginTop: 16 }}>
         <Text style={{ color: "#CBD5E1" }}>

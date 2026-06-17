@@ -1,18 +1,54 @@
-
-import { Button, DatePicker, Form, Input, InputNumber, Select, Typography } from "antd";
+import { Button, DatePicker, Form, Input, InputNumber, Select, Typography, message } from "antd";
+import { useMutation, useQuery } from "@apollo/client";
+import { useNavigate } from "react-router-dom";
+import { CATEGORIES, CREATE_TRANSACTION } from "../graphql/transactions.js";
 
 const { Title } = Typography;
 const { TextArea } = Input;
 
 export default function AddTransactionPage() {
+  const [messageApi, contextHolder] = message.useMessage();
+  const navigate = useNavigate();
   const [form] = Form.useForm();
 
-  const onFinish = (values) => {
-    console.log(values);
+  const { data: catData } = useQuery(CATEGORIES);
+  const categories = catData?.categories || [];
+
+  const allCategoryOptions = categories.map((c) => ({
+    value: c.id,
+    label: c.nameVi || c.name,
+    type: c.type,
+  }));
+
+  const [createTxn, { loading }] = useMutation(CREATE_TRANSACTION, {
+    onCompleted: () => {
+      messageApi.success("Đã thêm giao dịch thành công!");
+      form.resetFields();
+    },
+    onError: (err) => {
+      messageApi.error(err.message || "Thêm giao dịch thất bại");
+    },
+  });
+
+  const onFinish = async (values) => {
+    try {
+      await createTxn({
+        variables: {
+          type: values.type,
+          amount: String(values.amount),
+          date: values.date.format("YYYY-MM-DD"),
+          categoryId: values.categoryId || undefined,
+          note: values.note || "",
+        },
+      });
+    } catch (e) {
+      // Error handled by onError callback
+    }
   };
 
   const onCancel = () => {
     form.resetFields();
+    navigate("/transactions");
   };
 
   return (
@@ -27,6 +63,7 @@ export default function AddTransactionPage() {
         padding: "24px",
       }}
     >
+      {contextHolder}
       <div
         style={{
           width: "100%",
@@ -57,12 +94,7 @@ export default function AddTransactionPage() {
           <Form.Item
             label={<span style={{ color: "#FFFFFF" }}>Loại giao dịch</span>}
             name="type"
-            rules={[
-              {
-                required: true,
-                message: "Vui lòng chọn loại giao dịch",
-              },
-            ]}
+            rules={[{ required: true, message: "Vui lòng chọn loại giao dịch" }]}
           >
             <Select
               placeholder="Chọn loại giao dịch"
@@ -76,12 +108,7 @@ export default function AddTransactionPage() {
           <Form.Item
             label={<span style={{ color: "#FFFFFF" }}>Số tiền</span>}
             name="amount"
-            rules={[
-              {
-                required: true,
-                message: "Vui lòng nhập số tiền",
-              },
-            ]}
+            rules={[{ required: true, message: "Vui lòng nhập số tiền" }]}
           >
             <InputNumber
               style={{ width: "100%" }}
@@ -92,75 +119,41 @@ export default function AddTransactionPage() {
 
           <Form.Item
             label={<span style={{ color: "#FFFFFF" }}>Danh mục</span>}
-            name="category"
-            rules={[
-              {
-                required: true,
-                message: "Vui lòng chọn danh mục",
-              },
-            ]}
+            name="categoryId"
           >
             <Select
               placeholder="Chọn danh mục"
-              options={[
-                { value: "food", label: "Ăn uống" },
-                { value: "shopping", label: "Mua sắm" },
-                { value: "salary", label: "Lương" },
-                { value: "transport", label: "Di chuyển" },
-              ]}
+              allowClear
+              options={allCategoryOptions}
             />
           </Form.Item>
 
           <Form.Item
             label={<span style={{ color: "#FFFFFF" }}>Ngày</span>}
             name="date"
-            rules={[
-              {
-                required: true,
-                message: "Vui lòng chọn ngày",
-              },
-            ]}
+            rules={[{ required: true, message: "Vui lòng chọn ngày" }]}
           >
-            <DatePicker
-              style={{ width: "100%" }}
-              format="DD/MM/YYYY"
-            />
+            <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
           </Form.Item>
 
           <Form.Item
             label={<span style={{ color: "#FFFFFF" }}>Ghi chú</span>}
             name="note"
           >
-            <TextArea
-              rows={4}
-              placeholder="Nhập ghi chú..."
-            />
+            <TextArea rows={4} placeholder="Nhập ghi chú..." />
           </Form.Item>
 
           <Form.Item style={{ marginBottom: 0 }}>
-            <div
-              style={{
-                display: "flex",
-                gap: "12px",
-              }}
-            >
+            <div style={{ display: "flex", gap: "12px" }}>
               <Button
                 type="primary"
                 htmlType="submit"
-                style={{
-                  flex: 1,
-                  background: "#22C55E",
-                  borderColor: "#22C55E",
-                }}
+                loading={loading}
+                style={{ flex: 1, background: "#22C55E", borderColor: "#22C55E" }}
               >
                 Lưu
               </Button>
-
-              <Button
-                danger
-                style={{ flex: 1 }}
-                onClick={onCancel}
-              >
+              <Button danger style={{ flex: 1 }} onClick={onCancel}>
                 Hủy
               </Button>
             </div>
@@ -170,4 +163,3 @@ export default function AddTransactionPage() {
     </div>
   );
 }
-    

@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "./pages/LoginPage.jsx";
 import RegisterPage from "./pages/RegisterPage.jsx";
+import AccountsPage from "./pages/AccountsPage.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Transactions from "./pages/Transactions.jsx";
 import Goals from "./pages/Goals.jsx";
@@ -42,6 +43,14 @@ export default function App() {
         element={
           <ProtectedLayout>
             <ThemGiaoDich />
+          </ProtectedLayout>
+        }
+      />
+      <Route
+        path="/accounts"
+        element={
+          <ProtectedLayout>
+            <AccountsPage />
           </ProtectedLayout>
         }
       />
