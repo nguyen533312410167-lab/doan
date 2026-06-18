@@ -24,6 +24,9 @@ export default function Transactions() {
   });
   const transactions = txnData?.transactions || [];
 
+console.log("========== TRANSACTIONS ==========");
+console.log(transactions);
+
   const [createTxn] = useMutation(CREATE_TRANSACTION, {
     onCompleted: () => { refetch(); messageApi.success("Đã thêm giao dịch"); },
     onError: (err) => messageApi.error(err.message),
@@ -70,15 +73,22 @@ export default function Transactions() {
   };
 
   const handleSave = async () => {
-    try {
-      const values = await form.validateFields();
-      const variables = {
-        transactionType: values.type,
-        amount: String(values.amount),
-        date: values.date.format("YYYY-MM-DD"),
-        categoryId: values.categoryId || undefined,
-        note: values.note || "",
-      };
+  try {
+    const values = await form.validateFields();
+
+    console.log("========== FORM VALUES ==========");
+    console.log(values);
+
+    const variables = {
+      transactionType: values.type,
+      amount: String(values.amount),
+      date: values.date.format("YYYY-MM-DD"),
+      categoryId: values.categoryId || undefined,
+      note: values.note || "",
+    };
+
+    console.log("========== GRAPHQL VARIABLES ==========");
+    console.log(variables);
 
       if (editingId !== null) {
         await updateTxn({ variables: { id: editingId, ...variables } });
@@ -104,9 +114,12 @@ export default function Transactions() {
     : transactions;
 
   // Filter for type display
-  const displayTransactions = filterType === "all"
+  const displayTransactions =
+  filterType === "all"
     ? filteredTransactions
-    : filteredTransactions.filter(t => t.type === filterType);
+    : filteredTransactions.filter(
+        (t) => t.type?.toLowerCase() === filterType.toLowerCase()
+      );
 
   const columns = [
     {
@@ -131,7 +144,10 @@ export default function Transactions() {
       title: "Loại",
       dataIndex: "type",
       key: "type",
-      render: (type) => (type === "income" ? "Thu nhập" : "Chi tiêu"),
+      render: (type) =>
+  ["income", "INCOME"].includes(type)
+    ? "Thu nhập"
+    : "Chi tiêu",
       filters: [
         { text: "Thu nhập", value: "income" },
         { text: "Chi tiêu", value: "expense" },
@@ -144,8 +160,14 @@ export default function Transactions() {
       key: "amount",
       sorter: (a, b) => parseFloat(a.amount) - parseFloat(b.amount),
       render: (amount, record) => (
-        <span style={{ color: record.type === "income" ? "#52c41a" : "#f5222d" }}>
-          {record.type === "income" ? "+" : "-"}{parseFloat(amount).toLocaleString("vi-VN")} ₫
+        <span
+  style={{
+    color: ["income", "INCOME"].includes(record.type)
+      ? "#52c41a"
+      : "#f5222d",
+  }}
+>
+  {["income", "INCOME"].includes(record.type) ? "+" : "-"}{parseFloat(amount).toLocaleString("vi-VN")} ₫
         </span>
       ),
     },
