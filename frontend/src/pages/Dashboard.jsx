@@ -64,10 +64,10 @@ export default function Dashboard() {
             </Title>
             <Text className="sub">Tổng quan tài chính của bạn hôm nay</Text>
           </div>
-          <div className="header-actions">
+          {/* <div className="header-actions">
             <Button shape="circle" icon={<BellOutlined />} onClick={() => navigate("/thongbao")} />
             <Avatar size={48}>{user?.fullname?.[0] || "U"}</Avatar>
-          </div>
+          </div> */}
         </div>
 
         <Row gutter={[20, 20]}>
