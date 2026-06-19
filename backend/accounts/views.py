@@ -69,22 +69,31 @@ def get_token_user(request):
 
 # ─── Auth ───
 
+import logging
+logger = logging.getLogger(__name__)
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def login(request):
     body = json_body(request)
-    email = (body.get("email") or "").strip().lower()
+    username = (body.get("username") or "").strip()
     password = body.get("password", "")
 
-    if not email or not password:
-        return JsonResponse({"message": "Email và mật khẩu là bắt buộc"}, status=400)
+    logger.warning(f"LOGIN: body={body}")
+    logger.warning(f"LOGIN: username='{username}' password='{password}'")
+
+    if not username or not password:
+        return JsonResponse({"message": "Tên đăng nhập và mật khẩu là bắt buộc"}, status=400)
 
     try:
-        user = User.objects.get(email=email)
+        user = User.objects.get(username=username)
+        logger.warning(f"LOGIN: found user={user.username} active={user.is_active}")
     except User.DoesNotExist:
+        logger.warning(f"LOGIN: user '{username}' not found")
         return JsonResponse({"message": "Invalid credentials"}, status=401)
 
     if not user.check_password(password):
+        logger.warning(f"LOGIN: wrong password for {username}")
         return JsonResponse({"message": "Invalid credentials"}, status=401)
 
     if not user.is_active:
@@ -103,30 +112,26 @@ def login(request):
 @require_http_methods(["POST"])
 def register(request):
     body = json_body(request)
+    username = (body.get("username") or "").strip()
     fullname = (body.get("fullname") or "").strip()
     email = (body.get("email") or "").strip().lower()
     password = body.get("password", "")
 
-    if not fullname:
-        return JsonResponse({"message": "Họ tên là bắt buộc"}, status=400)
+    if not username:
+        return JsonResponse({"message": "Tên đăng nhập là bắt buộc"}, status=400)
     if not email:
         return JsonResponse({"message": "Email là bắt buộc"}, status=400)
     if not password or len(password) < 6:
         return JsonResponse({"message": "Mật khẩu tối thiểu 6 ký tự"}, status=400)
 
+    if User.objects.filter(username=username).exists():
+        return JsonResponse({"message": "Tên đăng nhập đã tồn tại"}, status=400)
     if User.objects.filter(email=email).exists():
         return JsonResponse({"message": "Email already registered"}, status=400)
 
     name_parts = fullname.split(" ", 1)
     first_name = name_parts[0] if len(name_parts) > 0 else ""
     last_name = name_parts[1] if len(name_parts) > 1 else ""
-    username = email.split("@")[0]
-
-    base_username = username
-    counter = 1
-    while User.objects.filter(username=username).exists():
-        username = f"{base_username}{counter}"
-        counter += 1
 
     user = User.objects.create_user(
         username=username,
@@ -287,7 +292,7 @@ def get_categories(request):
     if not user:
         return JsonResponse({"message": "Unauthorized"}, status=401)
     cats = Category.objects.filter(is_active=True).order_by("sort_order")
-    return JsonResponse(cats.map(category_data), safe=False)
+    return JsonResponse([category_data(c) for c in cats], safe=False)
 
 
 @csrf_exempt
@@ -645,43 +650,24 @@ def notification_data(n):
 @csrf_exempt
 @require_http_methods(["GET"])
 def get_notifications(request):
-    user = get_token_user(request)
-    if not user:
-        return JsonResponse({"message": "Unauthorized"}, status=401)
-    limit = request.GET.get("limit")
-    qs = user.notifications.all().order_by("-created_at")
-    if limit:
-        qs = qs[:int(limit)]
-    return JsonResponse([notification_data(n) for n in qs], safe=False)
+    return JsonResponse([], safe=False)
 
 
 @csrf_exempt
 @require_http_methods(["GET"])
 def get_unread_count(request):
-    user = get_token_user(request)
-    if not user:
-        return JsonResponse({"message": "Unauthorized"}, status=401)
-    count = user.notifications.filter(is_read=False).count()
-    return JsonResponse({"count": count})
+    return JsonResponse({"count": 0})
 
 
 @csrf_exempt
 @require_http_methods(["PUT"])
 def mark_as_read(request, id):
-    user = get_token_user(request)
-    if not user:
-        return JsonResponse({"message": "Unauthorized"}, status=401)
-    user.notifications.filter(pk=id).update(is_read=True)
     return JsonResponse({"ok": True})
 
 
 @csrf_exempt
 @require_http_methods(["PUT"])
 def mark_all_as_read(request):
-    user = get_token_user(request)
-    if not user:
-        return JsonResponse({"message": "Unauthorized"}, status=401)
-    user.notifications.filter(is_read=False).update(is_read=True)
     return JsonResponse({"ok": True})
 
 

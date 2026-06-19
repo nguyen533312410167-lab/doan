@@ -14,7 +14,7 @@ export default function RegisterPage() {
   const onFinish = async (values) => {
     try {
       setLoading(true);
-      const response = await authService.register(values.fullname, values.email, values.password);
+      const response = await authService.register(values.username, values.email, values.password);
       const { accessToken, refreshToken, user } = response.data;
 
       setToken(accessToken);
@@ -63,11 +63,11 @@ export default function RegisterPage() {
 
           <Form layout="vertical" onFinish={onFinish} className="auth-form">
             <Form.Item
-              label="Họ và tên"
-              name="fullname"
-              rules={[{ required: true, message: "Vui lòng nhập họ tên" }]}
+              label="Tên đăng nhập"
+              name="username"
+              rules={[{ required: true, message: "Vui lòng nhập Tên Đăng Nhập" }]}
             >
-              <Input prefix={<UserOutlined />} placeholder="Nhập họ và tên" size="large" />
+              <Input prefix={<UserOutlined />} placeholder="Nhập tên đăng nhập" size="large" />
             </Form.Item>
 
             <Form.Item

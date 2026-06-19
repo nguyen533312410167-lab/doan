@@ -15,7 +15,7 @@ export default function LoginPage() {
   const onFinish = async (values) => {
     try {
       setLoading(true);
-      const response = await authService.login(values.email, values.password);
+      const response = await authService.login(values.username, values.password);
       const { accessToken, refreshToken, user } = response.data;
 
       setToken(accessToken);
@@ -84,14 +84,13 @@ export default function LoginPage() {
 
           <Form layout="vertical" onFinish={onFinish} className="auth-form">
             <Form.Item
-              label="Email"
-              name="email"
+              label="Tên đăng nhập"
+              name="username"
               rules={[
-                { required: true, message: "Vui lòng nhập email" },
-                { type: "email", message: "Email không hợp lệ" },
+                { required: true, message: "Vui lòng nhập tên đăng nhập" },
               ]}
             >
-              <Input prefix={<UserOutlined />} placeholder="Nhập email" size="large" />
+              <Input prefix={<UserOutlined />} placeholder="Nhập tên đăng nhập" size="large" />
             </Form.Item>
 
             <Form.Item
