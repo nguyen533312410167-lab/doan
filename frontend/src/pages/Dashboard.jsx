@@ -153,125 +153,209 @@ export default function Dashboard() {
   };
 
   return (
-    <div style={{ padding: "24px" }}>
-      <h1>Dashboard</h1>
-      {contextHolder}
+  <div
+    style={{
+      padding: "24px",
+      background: "#05070d",
+      minHeight: "100vh",
+      color: "#fff",
+    }}
+  >
+    {contextHolder}
 
-      <Card style={{ marginBottom: 16 }}>
-        <Space wrap align="center" style={{ width: "100%", justifyContent: "space-between" }}>
-          <div>
-            <h3>Thêm Thu Nhập</h3>
-            <Form layout="inline" onFinish={() => {}}>
-              <Form.Item label={`Tháng ${currentMonth.format("MM/YYYY")}`} style={{ marginBottom: 0 }}>
-                <InputNumber
-                  value={incomeInput}
-                  placeholder="Nhập số tiền"
-                  onChange={(value) => setIncomeInput(value)}
-                  min={0}
-                  style={{ width: 200 }}
-                />
-              </Form.Item>
-              <Button
-                type="primary"
-                onClick={handleSaveIncome}
-                loading={saving}
-                style={{ background: "#22C55E", borderColor: "#22C55E" }}
-              >
-                Lưu thu nhập
-              </Button>
-            </Form>
-          </div>
-        </Space>
-      </Card>
-
-      <Row gutter={[16, 16]} style={{ marginBottom: "24px" }}>
-        <Col xs={24} sm={12} lg={8}>
-          <Card>
-            <Statistic title="Tổng Thu Nhập" value={stats.income} prefix={<DollarOutlined />}
-              valueStyle={{ color: "#52c41a" }} loading={loading}
-              formatter={(value) => `${value.toLocaleString("vi-VN")} ₫`} />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={8}>
-          <Card>
-            <Statistic title="Tổng Chi Tiêu" value={stats.expense} prefix={<DollarOutlined />}
-              valueStyle={{ color: "#f5222d" }} loading={loading}
-              formatter={(value) => `${value.toLocaleString("vi-VN")} ₫`} />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={8}>
-          <Card>
-            <Statistic title="Số Dư Hiện Tại" value={stats.balance} prefix={<DollarOutlined />}
-              valueStyle={{ color: stats.balance >= 0 ? "#1890ff" : "#f5222d" }} loading={loading}
-              formatter={(value) => `${value.toLocaleString("vi-VN")} ₫`} />
-          </Card>
-        </Col>
-      </Row>
-
-      <Card style={{ marginBottom: "24px" }}>
-        <Space direction="vertical" style={{ width: "100%" }}>
-          <h3>Trợ Lý Tài Chính</h3>
-          {alerts.map((alert, index) => (
-            <Alert key={index} message={alert.message} type={alert.type} showIcon style={{ marginBottom: "8px" }} />
-          ))}
-        </Space>
-      </Card>
-
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={12}>
-          <Card>
-            <h3>Phân bổ Chi Tiêu Theo Danh Mục</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie data={expenseByCategory} cx="50%" cy="50%" labelLine={false}
-                  label={({ name, percentage }) => `${name}: ${percentage.toFixed(1)}%`}
-                  outerRadius={80} fill="#8884d8" dataKey="value">
-                  {expenseByCategory.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => `${value.toLocaleString("vi-VN")} ₫`} />
-              </PieChart>
-            </ResponsiveContainer>
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card>
-            <h3>So Sánh Thu Nhập và Chi Tiêu</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={[
-                { name: "Thu nhập", income: stats.income, expense: 0 },
-                { name: "Chi tiêu", income: 0, expense: stats.expense },
-              ]}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip formatter={(value) => `${value.toLocaleString("vi-VN")} ₫`} />
-                <Legend />
-                <Bar dataKey="income" fill="#52c41a" name="Thu nhập" />
-                <Bar dataKey="expense" fill="#f5222d" name="Chi tiêu" />
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
-        </Col>
-      </Row>
-
-      <Divider />
-
-      <Card style={{ marginTop: 24 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h3 style={{ margin: 0 }}>Lịch sử Thu Nhập / Chi Tiêu</h3>
-          <DatePicker picker="month" value={historyMonth}
-            onChange={(date) => date && setHistoryMonth(date)}
-            format="MM/YYYY" allowClear={false} style={{ width: 140 }} />
+    {/* HEADER CARD */}
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 20,
+      }}
+    >
+      <div>
+        <h2 style={{ margin: 0, color: "#fff" }}>Tổng quan</h2>
+        <div style={{ color: "#94a3b8", fontSize: 13 }}>
+          Quản lý tài chính cá nhân
         </div>
-        <Table dataSource={[singleMonthData]} pagination={false} columns={[
-          { title: "Tháng", dataIndex: "month", key: "month" },
-          { title: "Thu nhập", dataIndex: "income", key: "income", render: (v) => `${v.toLocaleString("vi-VN")} ₫` },
-          { title: "Chi tiêu", dataIndex: "expense", key: "expense", render: (v) => `${v.toLocaleString("vi-VN")} ₫` },
-          { title: "Chênh lệch", key: "balance", render: (_, r) => `${(r.income - r.expense).toLocaleString("vi-VN")} ₫` },
-        ]} />
-      </Card>
+      </div>
     </div>
-  );
+
+    {/* TOP STATS */}
+    <Row gutter={[16, 16]}>
+      <Col xs={24} lg={12}>
+        <Card
+          style={{
+            background: "linear-gradient(135deg,#0b1220,#0a1a12)",
+            border: "1px solid rgba(34,197,94,0.15)",
+            borderRadius: 16,
+          }}
+        >
+          <div style={{ color: "#94a3b8", marginBottom: 8 }}>
+            Tổng số dư hiện tại
+          </div>
+
+          <div style={{ fontSize: 32, fontWeight: 700, color: "#22c55e" }}>
+            {(stats.balance || 0).toLocaleString("vi-VN")} ₫
+          </div>
+
+          <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 8 }}>
+            so với tháng trước
+          </div>
+        </Card>
+      </Col>
+
+      <Col xs={24} lg={12}>
+        <Card
+          style={{
+            background: "#0b1220",
+            border: "1px solid rgba(255,255,255,0.06)",
+            borderRadius: 16,
+          }}
+        >
+          <Statistic
+            title={<span style={{ color: "#94a3b8" }}>Thu nhập</span>}
+            value={stats.income}
+            valueStyle={{ color: "#22c55e" }}
+            formatter={(v) => `${v.toLocaleString("vi-VN")} ₫`}
+          />
+          <Statistic
+            title={<span style={{ color: "#94a3b8" }}>Chi tiêu</span>}
+            value={stats.expense}
+            valueStyle={{ color: "#ef4444" }}
+            formatter={(v) => `${v.toLocaleString("vi-VN")} ₫`}
+          />
+        </Card>
+      </Col>
+    </Row>
+
+    {/* ALERTS */}
+    <Card
+      style={{
+        marginTop: 16,
+        background: "#0b1220",
+        border: "1px solid rgba(255,255,255,0.06)",
+        borderRadius: 16,
+      }}
+    >
+      <h3 style={{ color: "#fff" }}>Trợ lý tài chính</h3>
+
+      {alerts.map((a, i) => (
+        <Alert
+          key={i}
+          message={a.message}
+          type={a.type}
+          showIcon
+          style={{
+            marginBottom: 8,
+            background: "rgba(255,255,255,0.02)",
+            border: "none",
+          }}
+        />
+      ))}
+    </Card>
+
+    {/* CHART ROW */}
+    <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+      <Col xs={24} lg={12}>
+        <Card
+          style={{
+            background: "#0b1220",
+            borderRadius: 16,
+            border: "1px solid rgba(255,255,255,0.06)",
+          }}
+        >
+          <h3 style={{ color: "#fff" }}>Chi tiêu theo danh mục</h3>
+
+          <ResponsiveContainer width="100%" height={280}>
+            <PieChart>
+              <Pie
+                data={expenseByCategory}
+                cx="50%"
+                cy="50%"
+                outerRadius={90}
+                dataKey="value"
+                label={({ name, percentage }) =>
+                  `${name}: ${percentage.toFixed(0)}%`
+                }
+              >
+                {expenseByCategory.map((_, i) => (
+                  <Cell
+                    key={i}
+                    fill={["#22c55e", "#16a34a", "#84cc16", "#f59e0b"][i % 4]}
+                  />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </Card>
+      </Col>
+
+      <Col xs={24} lg={12}>
+        <Card
+          style={{
+            background: "#0b1220",
+            borderRadius: 16,
+            border: "1px solid rgba(255,255,255,0.06)",
+          }}
+        >
+          <h3 style={{ color: "#fff" }}>Thu & Chi</h3>
+
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart
+              data={[
+                { name: "Thu", value: stats.income },
+                { name: "Chi", value: stats.expense },
+              ]}
+            >
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="value" fill="#22c55e" />
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      </Col>
+    </Row>
+
+    {/* TABLE */}
+    <Card
+      style={{
+        marginTop: 16,
+        background: "#0b1220",
+        borderRadius: 16,
+        border: "1px solid rgba(255,255,255,0.06)",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <h3 style={{ color: "#fff" }}>Lịch sử theo tháng</h3>
+
+        <DatePicker
+          picker="month"
+          value={historyMonth}
+          onChange={(d) => d && setHistoryMonth(d)}
+        />
+      </div>
+
+      <Table
+        dataSource={[singleMonthData]}
+        pagination={false}
+        style={{ marginTop: 10 }}
+        columns={[
+          { title: "Tháng", dataIndex: "month" },
+          {
+            title: "Thu nhập",
+            dataIndex: "income",
+            render: (v) => `${v.toLocaleString("vi-VN")} ₫`,
+          },
+          {
+            title: "Chi tiêu",
+            dataIndex: "expense",
+            render: (v) => `${v.toLocaleString("vi-VN")} ₫`,
+          },
+        ]}
+      />
+    </Card>
+  </div>
+);
 }
