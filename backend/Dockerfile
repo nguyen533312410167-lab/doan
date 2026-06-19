@@ -1,14 +1,16 @@
-FROM node:20-alpine
+FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm install
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p uploads/avatar
+EXPOSE 8000
 
-EXPOSE 5000
-
-CMD ["node", "src/server.js"]
+CMD sh -c '\
+  python manage.py migrate --noinput && \
+  python manage.py seed_admin && \
+  python manage.py seed_data && \
+  python manage.py runserver 0.0.0.0:8000'
