@@ -1,8 +1,16 @@
 1
 /var/lib/postgresql/data
+<<<<<<< Updated upstream
 1781746877
 5432
 /var/run/postgresql
 *
     26329         5
+=======
+1781843574
+5432
+/var/run/postgresql
+*
+   380975         0
+>>>>>>> Stashed changes
 ready   

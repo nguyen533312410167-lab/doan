@@ -1,129 +1,140 @@
-import { useMutation, useApolloClient } from "@apollo/client";
-import { LockOutlined, UserOutlined } from "@ant-design/icons";
-import { Alert, Button, Form, Input, Typography } from "antd";
+import { useState } from "react";
+import { Form, Input, Button, Typography, message, Divider } from "antd";
+import { LockOutlined, UserOutlined, WalletOutlined, CrownOutlined } from "@ant-design/icons";
 import { Link, useNavigate } from "react-router-dom";
-
-import { LOGIN } from "../graphql/account.js";
 import { setToken } from "../lib/auth.js";
+import { authService } from "../services/authService.js";
 
 const { Title, Text } = Typography;
 
 export default function LoginPage() {
+  const [loading, setLoading] = useState(false);
+  const [adminLoading, setAdminLoading] = useState(false);
   const navigate = useNavigate();
-  const client = useApolloClient();
-  const [login, { loading, error }] = useMutation(LOGIN);
 
   const onFinish = async (values) => {
-    const result = await login({ variables: values });
-    setToken(result.data.tokenAuth.token);
-    await client.resetStore();
-    navigate("/dashboard", { replace: true });
+    try {
+      setLoading(true);
+      const response = await authService.login(values.email, values.password);
+      const { accessToken, refreshToken, user } = response.data;
+
+      setToken(accessToken);
+      if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
+      if (user) localStorage.setItem("user", JSON.stringify(user));
+
+      message.success("Đăng nhập thành công");
+      navigate("/dashboard", { replace: true });
+    } catch (error) {
+      const msg = error.response?.data?.message || "Đăng nhập thất bại";
+      message.error(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
- return (
-  <div
-    className="auth-wrap"
-    style={{
-      minHeight: "100vh",
-      display: "flex",
-      justifyContent: "center",
-      alignItems: "center",
-      background:
-        "linear-gradient(135deg, #07120B 0%, #0B1D12 50%, #10291A 100%)",
-    }}
-  >
-    <div
-      className="auth-panel"
-      style={{
-        width: 420,
-        padding: 32,
-        background: "#101A13",
-        border: "1px solid #1E3A29",
-        borderRadius: 16,
-        boxShadow: "0 20px 40px rgba(0,0,0,.35)",
-      }}
-    >
-      <Title level={2} style={{ color: "#F8FAFC", marginBottom: 8 }}>
-        Đăng nhập
-      </Title>
+  const handleAdminLogin = async () => {
+    try {
+      setAdminLoading(true);
+      const response = await authService.autoLogin();
+      const { accessToken, refreshToken, user } = response.data;
 
-      <Text style={{ color: "#94A3B8" }}>
-        Sử dụng tài khoản Django để truy cập GraphQL dashboard.
-      </Text>
+      setToken(accessToken);
+      if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
+      if (user) localStorage.setItem("user", JSON.stringify(user));
 
-      {error && (
-        <Alert
-          className="form-alert"
-          type="error"
-          showIcon
-          message={error.message}
-          style={{ marginTop: 16, marginBottom: 16 }}
-        />
-      )}
+      message.success("Đăng nhập Admin thành công");
+      navigate("/dashboard", { replace: true });
+    } catch (error) {
+      const msg = error.response?.data?.message || "Đăng nhập Admin thất bại";
+      message.error(msg);
+    } finally {
+      setAdminLoading(false);
+    }
+  };
 
-      <Form layout="vertical" onFinish={onFinish} autoComplete="off">
-        <Form.Item
-          name="username"
-          label={<span style={{ color: "#E2E8F0" }}>Tên đăng nhập</span>}
-          rules={[{ required: true, message: "Nhập tên đăng nhập" }]}
-        >
-          <Input
-            prefix={<UserOutlined style={{ color: "#22C55E" }} />}
+  return (
+    <div className="auth-page">
+      <div className="auth-glow glow-left" />
+      <div className="auth-glow glow-right" />
+
+      <div className="auth-wrapper">
+        <div className="auth-banner">
+          <div className="banner-content">
+            <WalletOutlined className="banner-icon" />
+            <h1>Finance Manager</h1>
+            <p>
+              Quản lý chi tiêu thông minh,
+              theo dõi thu nhập và đạt được
+              mục tiêu tài chính của bạn.
+            </p>
+          </div>
+        </div>
+
+        <div className="auth-container">
+          <div className="logo-box">
+            <WalletOutlined />
+          </div>
+
+          <Title level={2} className="auth-title">
+            Chào mừng trở lại
+          </Title>
+          <Text className="auth-subtitle">
+            Đăng nhập để tiếp tục sử dụng hệ thống
+          </Text>
+
+          <Form layout="vertical" onFinish={onFinish} className="auth-form">
+            <Form.Item
+              label="Email"
+              name="email"
+              rules={[
+                { required: true, message: "Vui lòng nhập email" },
+                { type: "email", message: "Email không hợp lệ" },
+              ]}
+            >
+              <Input prefix={<UserOutlined />} placeholder="Nhập email" size="large" />
+            </Form.Item>
+
+            <Form.Item
+              label="Mật khẩu"
+              name="password"
+              rules={[{ required: true, message: "Vui lòng nhập mật khẩu" }]}
+            >
+              <Input.Password prefix={<LockOutlined />} placeholder="Nhập mật khẩu" size="large" />
+            </Form.Item>
+
+            <Button htmlType="submit" block loading={loading} className="auth-btn">
+              ĐĂNG NHẬP
+            </Button>
+          </Form>
+
+          <Divider style={{ borderColor: '#334155', margin: '16px 0' }}>
+            <Text style={{ color: '#64748B', fontSize: 13 }}>HOẶC</Text>
+          </Divider>
+
+          <Button
+            block
+            loading={adminLoading}
+            icon={<CrownOutlined />}
+            onClick={handleAdminLogin}
             style={{
-              background: "#16231A",
-              border: "1px solid #284333",
-              color: "#fff",
-            }}
-          />
-        </Form.Item>
-
-        <Form.Item
-          name="password"
-          label={<span style={{ color: "#E2E8F0" }}>Mật khẩu</span>}
-          rules={[{ required: true, message: "Nhập mật khẩu" }]}
-        >
-          <Input.Password
-            prefix={<LockOutlined style={{ color: "#22C55E" }} />}
-            style={{
-              background: "#16231A",
-              border: "1px solid #284333",
-              color: "#fff",
-            }}
-          />
-        </Form.Item>
-
-        <Button
-          type="primary"
-          htmlType="submit"
-          loading={loading}
-          block
-          style={{
-            background: "#22C55E",
-            borderColor: "#22C55E",
-            height: 42,
-            fontWeight: 600,
-          }}
-        >
-          Đăng nhập
-        </Button>
-      </Form>
-
-      <div style={{ marginTop: 16 }}>
-        <Text style={{ color: "#CBD5E1" }}>
-          Chưa có tài khoản?{" "}
-          <Link
-            to="/register"
-            style={{
-              color: "#4ADE80",
-              fontWeight: 500,
+              height: 44,
+              background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+              border: 'none',
+              color: '#fff',
+              fontWeight: 600,
+              fontSize: 15,
+              borderRadius: 12,
+              marginBottom: 16,
             }}
           >
-            Đăng ký
-          </Link>
-        </Text>
+            ĐĂNG NHẬP ADMIN
+          </Button>
+
+          <div className="bottom-text">
+            Chưa có tài khoản? <Link to="/register">Đăng ký</Link>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
 }
-

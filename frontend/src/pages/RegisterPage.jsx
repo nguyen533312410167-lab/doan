@@ -1,201 +1,125 @@
-import { useMutation } from "@apollo/client";
-import { Alert, Button, Form, Input, Typography } from "antd";
+import { useState } from "react";
+import { Form, Input, Button, Typography, message } from "antd";
+import { LockOutlined, UserOutlined, WalletOutlined, MailOutlined } from "@ant-design/icons";
 import { Link, useNavigate } from "react-router-dom";
-
-import { REGISTER } from "../graphql/account.js";
+import { setToken } from "../lib/auth.js";
+import { authService } from "../services/authService.js";
 
 const { Title, Text } = Typography;
 
 export default function RegisterPage() {
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const [register, { loading, error }] = useMutation(REGISTER, {
-    onCompleted: (data) => {
-      if (data?.register?.user) {
-        navigate("/login", { replace: true });
-      }
-    },
-    onError: (err) => {
-      console.error("Register error:", err);
-    },
-  });
 
   const onFinish = async (values) => {
-    await register({
-      variables: {
-        username: values.username,
-        email: values.email,
-        password: values.password,
-        firstName: values.firstName || "",
-        lastName: values.lastName || "",
-      },
-    });
-  };
+    try {
+      setLoading(true);
+      const response = await authService.register(values.fullname, values.email, values.password);
+      const { accessToken, refreshToken, user } = response.data;
 
-  const getErrorMessage = () => {
-    if (!error) return null;
-    return error.graphQLErrors?.[0]?.message || error.message || "Đăng ký thất bại";
-  };
+      setToken(accessToken);
+      if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
+      if (user) localStorage.setItem("user", JSON.stringify(user));
 
-  const errMsg = getErrorMessage();
+      message.success("Đăng ký thành công");
+      navigate("/dashboard", { replace: true });
+    } catch (error) {
+      const msg = error.response?.data?.message || "Đăng ký thất bại";
+      message.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div
-      className="auth-wrap"
-      style={{
-        minHeight: "100vh",
-        width: "100%",
-        background:
-          "linear-gradient(135deg, #020617 0%, #031B10 30%, #052E16 60%, #04180D 100%)",
-      }}
-    >
-      <div
-        className="auth-panel"
-        style={{
-          background: "rgba(8,22,15,0.95)",
-          border: "1px solid #1F5132",
-        }}
-      >
-        <Title level={2} style={{ color: "#FFFFFF" }}>
-          Đăng ký tài khoản
-        </Title>
+    <div className="auth-page">
+      <div className="auth-glow glow-left" />
+      <div className="auth-glow glow-right" />
 
-        <Text style={{ color: "rgba(255,255,255,0.8)" }}>
-          Tạo tài khoản người dùng mới.
-        </Text>
+      <div className="auth-wrapper">
+        <div className="auth-banner">
+          <div className="banner-content">
+            <WalletOutlined className="banner-icon" />
+            <h1>Finance Manager</h1>
+            <p>
+              Quản lý chi tiêu thông minh,
+              theo dõi thu nhập và đạt được
+              mục tiêu tài chính của bạn.
+            </p>
+          </div>
+        </div>
 
-        {errMsg && (
-          <Alert
-            className="form-alert"
-            type="error"
-            showIcon
-            message={errMsg}
-          />
-        )}
-
-        <Form layout="vertical" onFinish={onFinish} autoComplete="off">
-          <Form.Item
-            name="username"
-            label={<span style={{ color: "#FFFFFF" }}>Tên đăng nhập</span>}
-            rules={[{ required: true, message: "Nhập tên đăng nhập" }]}
-          >
-            <Input
-              style={{
-                background: "#102019",
-                borderColor: "#2D5A3D",
-                color: "#FFFFFF",
-              }}
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="email"
-            label={<span style={{ color: "#FFFFFF" }}>Email</span>}
-            rules={[
-              { required: true, message: "Nhập email" },
-              { type: "email", message: "Email không hợp lệ" },
-            ]}
-          >
-            <Input
-              style={{
-                background: "#102019",
-                borderColor: "#2D5A3D",
-                color: "#FFFFFF",
-              }}
-            />
-          </Form.Item>
-
-          <div className="form-grid">
-            <Form.Item
-              name="firstName"
-              label={<span style={{ color: "#FFFFFF" }}>Tên</span>}
-            >
-              <Input
-                style={{
-                  background: "#102019",
-                  borderColor: "#2D5A3D",
-                  color: "#FFFFFF",
-                }}
-              />
-            </Form.Item>
-
-            <Form.Item
-              name="lastName"
-              label={<span style={{ color: "#FFFFFF" }}>Họ</span>}
-            >
-              <Input
-                style={{
-                  background: "#102019",
-                  borderColor: "#2D5A3D",
-                  color: "#FFFFFF",
-                }}
-              />
-            </Form.Item>
+        <div className="auth-container">
+          <div className="logo-box">
+            <WalletOutlined />
           </div>
 
-          <Form.Item
-            name="password"
-            label={<span style={{ color: "#FFFFFF" }}>Mật khẩu</span>}
-            rules={[
-              { required: true, message: "Nhập mật khẩu" },
-              { min: 8, message: "Tối thiểu 8 ký tự" },
-            ]}
-          >
-            <Input.Password
-              style={{
-                background: "#102019",
-                borderColor: "#2D5A3D",
-                color: "#FFFFFF",
-              }}
-            />
-          </Form.Item>
+          <Title level={2} className="auth-title">
+            Tạo tài khoản
+          </Title>
+          <Text className="auth-subtitle">
+            Đăng ký để bắt đầu quản lý tài chính
+          </Text>
 
-          <Form.Item
-            name="confirmPassword"
-            label={<span style={{ color: "#FFFFFF" }}>Xác nhận mật khẩu</span>}
-            dependencies={["password"]}
-            rules={[
-              { required: true, message: "Xác nhận mật khẩu" },
-              ({ getFieldValue }) => ({
-                validator(_, value) {
-                  if (!value || getFieldValue("password") === value) {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject(new Error("Mật khẩu không khớp!"));
-                },
-              }),
-            ]}
-          >
-            <Input.Password
-              style={{
-                background: "#102019",
-                borderColor: "#2D5A3D",
-                color: "#FFFFFF",
-              }}
-            />
-          </Form.Item>
+          <Form layout="vertical" onFinish={onFinish} className="auth-form">
+            <Form.Item
+              label="Họ và tên"
+              name="fullname"
+              rules={[{ required: true, message: "Vui lòng nhập họ tên" }]}
+            >
+              <Input prefix={<UserOutlined />} placeholder="Nhập họ và tên" size="large" />
+            </Form.Item>
 
-          <Button
-            type="primary"
-            htmlType="submit"
-            loading={loading}
-            block
-            style={{
-              background: "#22C55E",
-              borderColor: "#22C55E",
-              color: "#FFFFFF",
-              fontWeight: 600,
-            }}
-          >
-            Đăng ký
-          </Button>
-        </Form>
+            <Form.Item
+              label="Email"
+              name="email"
+              rules={[
+                { required: true, message: "Vui lòng nhập email" },
+                { type: "email", message: "Email không hợp lệ" },
+              ]}
+            >
+              <Input prefix={<MailOutlined />} placeholder="Nhập email" size="large" />
+            </Form.Item>
 
-        <Text style={{ color: "#FFFFFF" }}>
-          Đã có tài khoản?{" "}
-          <Link to="/login" style={{ color: "#4ADE80" }}>
-            Đăng nhập
-          </Link>
-        </Text>
+            <Form.Item
+              label="Mật khẩu"
+              name="password"
+              rules={[
+                { required: true, message: "Vui lòng nhập mật khẩu" },
+                { min: 6, message: "Mật khẩu tối thiểu 6 ký tự" },
+              ]}
+            >
+              <Input.Password prefix={<LockOutlined />} placeholder="Nhập mật khẩu" size="large" />
+            </Form.Item>
+
+            <Form.Item
+              label="Xác nhận mật khẩu"
+              name="confirmPassword"
+              dependencies={["password"]}
+              rules={[
+                { required: true, message: "Vui lòng xác nhận mật khẩu" },
+                ({ getFieldValue }) => ({
+                  validator(_, value) {
+                    if (!value || getFieldValue("password") === value) {
+                      return Promise.resolve();
+                    }
+                    return Promise.reject(new Error("Mật khẩu không khớp"));
+                  },
+                }),
+              ]}
+            >
+              <Input.Password prefix={<LockOutlined />} placeholder="Xác nhận mật khẩu" size="large" />
+            </Form.Item>
+
+            <Button htmlType="submit" block loading={loading} className="auth-btn">
+              ĐĂNG KÝ
+            </Button>
+          </Form>
+
+          <div className="bottom-text">
+            Đã có tài khoản? <Link to="/login">Đăng nhập</Link>
+          </div>
+        </div>
       </div>
     </div>
   );

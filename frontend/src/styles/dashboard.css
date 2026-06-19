@@ -1,0 +1,98 @@
+.dashboard-page{
+  min-height:100vh;
+  padding:24px;
+
+  background:
+  radial-gradient(
+      circle at top center,
+      rgba(30,255,98,.12),
+      transparent 35%
+  ),
+  #05070c;
+}
+
+.dashboard-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:24px;
+}
+
+.welcome{
+  color:#fff !important;
+}
+
+.sub{
+  color:#94a3b8;
+}
+
+.header-actions{
+  display:flex;
+  gap:16px;
+  align-items:center;
+}
+
+.balance-card{
+  background:
+  linear-gradient(
+    135deg,
+    #08150d,
+    #0d2415
+  ) !important;
+
+  border:1px solid rgba(30,255,98,.15);
+
+  border-radius:24px;
+}
+
+.balance-card h1{
+  color:#1EFF62;
+  font-size:52px;
+  margin-top:20px;
+}
+
+.balance-growth{
+  color:#1EFF62;
+}
+
+.stat-card{
+  background:#0d141e !important;
+  border-radius:20px;
+  text-align:center;
+}
+
+.stat-card h3{
+  color:#1EFF62;
+}
+
+.red h3{
+  color:#ff4d4f;
+}
+
+.dark-card{
+  background:#0d141e !important;
+  border-radius:24px;
+}
+
+.dark-card .ant-card-head-title{
+  color:#fff;
+}
+
+.transaction-item{
+  display:flex;
+  justify-content:space-between;
+
+  padding:14px 0;
+
+  border-bottom:1px solid rgba(255,255,255,.06);
+
+  color:white;
+}
+
+.income{
+  color:#1EFF62;
+}
+
+.expense{
+  color:#ff4d4f;
+}

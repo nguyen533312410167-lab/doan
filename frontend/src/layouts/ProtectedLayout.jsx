@@ -1,11 +1,15 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, Outlet } from "react-router-dom";
 import { isAuthenticated } from "../lib/auth.js";
 import LayoutMaster from "./LayoutMaster.jsx";
 
-export default function ProtectedLayout({ children }) {
-  return isAuthenticated() ? (
-    <LayoutMaster>{children}</LayoutMaster>
-  ) : (
-    <Navigate to="/login" replace />
+export default function ProtectedLayout() {
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return (
+    <LayoutMaster>
+      <Outlet />
+    </LayoutMaster>
   );
 }

@@ -1,50 +1,56 @@
-import { Table, Button, Modal, Form, Input, Select, DatePicker, Space, Row, Col, Card, message } from "antd";
+import { useState, useEffect } from "react";
+import { Table, Button, Modal, Form, Input, Select, DatePicker, Space, Row, Col, Card, message, Tag } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
-import { useState } from "react";
-import { useMutation, useQuery } from "@apollo/client";
+import { transactionService } from "../services/transactionService.js";
+import { categoryService } from "../services/categoryService.js";
 import dayjs from "dayjs";
-import { TRANSACTIONS, CATEGORIES, CREATE_TRANSACTION, UPDATE_TRANSACTION, DELETE_TRANSACTION } from "../graphql/transactions.js";
 
 export default function Transactions() {
   const [messageApi, contextHolder] = message.useMessage();
+  const [transactions, setTransactions] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form] = Form.useForm();
-  const [filterType, setFilterType] = useState("all");
   const [searchText, setSearchText] = useState("");
+  const [filterType, setFilterType] = useState("");
 
-  const { data: catData } = useQuery(CATEGORIES);
-  const categories = catData?.categories || [];
+  useEffect(() => {
+    loadCategories();
+    loadTransactions();
+  }, []);
 
-  const [selectedType, setSelectedType] = useState(null);
+  const loadCategories = async () => {
+    try {
+      const response = await categoryService.getAll();
+      setCategories(response.data);
+    } catch (error) {
+      console.error("Load categories error:", error);
+    }
+  };
 
-  const { data: txnData, loading, refetch } = useQuery(TRANSACTIONS, {
-    variables: { search: searchText || undefined },
-    fetchPolicy: "network-only",
-  });
-  const transactions = txnData?.transactions || [];
-
-console.log("========== TRANSACTIONS ==========");
-console.log(transactions);
-
-  const [createTxn] = useMutation(CREATE_TRANSACTION, {
-    onCompleted: () => { refetch(); messageApi.success("Đã thêm giao dịch"); },
-    onError: (err) => messageApi.error(err.message),
-  });
-  const [updateTxn] = useMutation(UPDATE_TRANSACTION, {
-    onCompleted: () => { refetch(); messageApi.success("Đã cập nhật giao dịch"); },
-    onError: (err) => messageApi.error(err.message),
-  });
-  const [deleteTxn] = useMutation(DELETE_TRANSACTION, {
-    onCompleted: () => { refetch(); messageApi.success("Đã xóa giao dịch"); },
-    onError: (err) => messageApi.error(err.message),
-  });
-
-  const { Option } = Select;
+  const loadTransactions = async (page = 1) => {
+    try {
+      setLoading(true);
+      const params = { page, limit: pagination.limit };
+      if (searchText) params.search = searchText;
+      if (filterType) params.type = filterType;
+      const response = await transactionService.getAll(params);
+      setTransactions(response.data.transactions);
+      setPagination(response.data.pagination);
+    } catch (error) {
+      messageApi.error("Tải giao dịch thất bại");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAdd = () => {
     setEditingId(null);
     form.resetFields();
+    form.setFieldsValue({ transaction_date: dayjs() });
     setIsModalOpen(true);
   };
 
@@ -53,9 +59,9 @@ console.log(transactions);
     form.setFieldsValue({
       type: record.type,
       amount: parseFloat(record.amount),
-      categoryId: record.category?.id || undefined,
-      note: record.note,
-      date: dayjs(record.date),
+      category_id: record.category_id || undefined,
+      description: record.description || "",
+      transaction_date: dayjs(record.transaction_date),
     });
     setIsModalOpen(true);
   };
@@ -67,117 +73,74 @@ console.log(transactions);
       okButtonProps: { danger: true },
       cancelText: "Hủy",
       onOk: async () => {
-        await deleteTxn({ variables: { id } });
+        try {
+          await transactionService.delete(id);
+          messageApi.success("Đã xóa giao dịch");
+          loadTransactions(pagination.page);
+        } catch (error) {
+          messageApi.error("Xóa thất bại");
+        }
       },
     });
   };
 
   const handleSave = async () => {
-  try {
-    const values = await form.validateFields();
+    try {
+      const values = await form.validateFields();
+      const data = {
+        type: values.type,
+        amount: values.amount,
+        category_id: values.category_id || null,
+        description: values.description || "",
+        transaction_date: values.transaction_date.format("YYYY-MM-DD"),
+      };
 
-    console.log("========== FORM VALUES ==========");
-    console.log(values);
-
-    const variables = {
-      transactionType: values.type,
-      amount: String(values.amount),
-      date: values.date.format("YYYY-MM-DD"),
-      categoryId: values.categoryId || undefined,
-      note: values.note || "",
-    };
-
-    console.log("========== GRAPHQL VARIABLES ==========");
-    console.log(variables);
-
-      if (editingId !== null) {
-        await updateTxn({ variables: { id: editingId, ...variables } });
+      if (editingId) {
+        await transactionService.update(editingId, data);
+        messageApi.success("Đã cập nhật giao dịch");
       } else {
-        await createTxn({ variables });
+        await transactionService.create(data);
+        messageApi.success("Đã thêm giao dịch");
       }
+
       setIsModalOpen(false);
       form.resetFields();
+      loadTransactions(pagination.page);
     } catch (error) {
-      if (error.errorFields) return; // validation failed
-      console.error("Save failed:", error);
+      if (error.errorFields) return;
+      messageApi.error(error.response?.data?.message || "Lưu thất bại");
     }
   };
 
-  const filteredTransactions = searchText
-    ? transactions.filter((t) => {
-        const text = searchText.toLowerCase();
-        return (
-          (t.note || "").toLowerCase().includes(text) ||
-          (t.categoryName || "").toLowerCase().includes(text)
-        );
-      })
-    : transactions;
-
-  // Filter for type display
-  const displayTransactions =
-  filterType === "all"
-    ? filteredTransactions
-    : filteredTransactions.filter(
-        (t) => t.type?.toLowerCase() === filterType.toLowerCase()
-      );
+  const handleTableChange = (pag) => {
+    loadTransactions(pag.current);
+  };
 
   const columns = [
-    {
-      title: "Ngày",
-      dataIndex: "date",
-      key: "date",
-      sorter: (a, b) => new Date(a.date) - new Date(b.date),
+    { title: "Ngày", dataIndex: "transaction_date", key: "transaction_date", width: 120,
       render: (date) => dayjs(date).format("DD/MM/YYYY"),
     },
-    {
-      title: "Danh Mục",
-      dataIndex: "categoryName",
-      key: "categoryName",
-      render: (name) => name || "Khác",
+    { title: "Danh Mục", dataIndex: ["category", "name"], key: "category", render: (name) => name || "Khác" },
+    { title: "Mô tả", dataIndex: "description", key: "description", ellipsis: true },
+    { title: "Loại", dataIndex: "type", key: "type", width: 100,
+      render: (type) => (
+        <Tag color={type === "income" ? "green" : "red"}>
+          {type === "income" ? "Thu nhập" : "Chi tiêu"}
+        </Tag>
+      ),
     },
-    {
-      title: "Ghi Chú",
-      dataIndex: "note",
-      key: "note",
-    },
-    {
-      title: "Loại",
-      dataIndex: "type",
-      key: "type",
-      render: (type) =>
-  ["income", "INCOME"].includes(type)
-    ? "Thu nhập"
-    : "Chi tiêu",
-      filters: [
-        { text: "Thu nhập", value: "income" },
-        { text: "Chi tiêu", value: "expense" },
-      ],
-      onFilter: (value, record) => record.type === value,
-    },
-    {
-      title: "Số Tiền",
-      dataIndex: "amount",
-      key: "amount",
-      sorter: (a, b) => parseFloat(a.amount) - parseFloat(b.amount),
+    { title: "Số Tiền", dataIndex: "amount", key: "amount", width: 150,
       render: (amount, record) => (
-        <span
-  style={{
-    color: ["income", "INCOME"].includes(record.type)
-      ? "#52c41a"
-      : "#f5222d",
-  }}
->
-  {["income", "INCOME"].includes(record.type) ? "+" : "-"}{parseFloat(amount).toLocaleString("vi-VN")} ₫
+        <span style={{ color: record.type === "income" ? "#22C55E" : "#EF4444", fontWeight: 600 }}>
+          {record.type === "income" ? "+" : "-"}{parseFloat(amount).toLocaleString("vi-VN")} ₫
         </span>
       ),
     },
-    {
-      title: "Hành Động",
-      key: "action",
+    { title: "Hành Động", key: "action", width: 150,
       render: (_, record) => (
         <Space>
-          <Button type="primary" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>Sửa</Button>
-          <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)}>Xóa</Button>
+          <Button type="primary" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} />
+          <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} />
         </Space>
       ),
     },
@@ -186,90 +149,91 @@ console.log(transactions);
   return (
     <div style={{ padding: "24px" }}>
       {contextHolder}
-      <h1>Quản Lý Giao Dịch</h1>
+      <h1 style={{ color: "#fff", marginBottom: 24 }}>Quản Lý Giao Dịch</h1>
 
-      <Card style={{ marginBottom: "16px" }}>
-        <Row gutter={[16, 16]} style={{ marginBottom: "16px" }}>
+      <Card>
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col xs={24} sm={12} md={6}>
             <Input.Search
-              placeholder="Tìm kiếm ghi chú hoặc danh mục"
+              placeholder="Tìm kiếm..."
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
-              onSearch={() => refetch()}
+              onSearch={() => loadTransactions(1)}
+              enterButton
             />
           </Col>
-          <Col xs={24} sm={12} md={6}>
+          <Col xs={24} sm={12} md={4}>
             <Select
               value={filterType}
-              onChange={setFilterType}
+              onChange={(value) => { setFilterType(value); loadTransactions(1); }}
               style={{ width: "100%" }}
+              placeholder="Lọc loại"
+              allowClear
               options={[
-                { label: "Tất cả", value: "all" },
                 { label: "Thu nhập", value: "income" },
                 { label: "Chi tiêu", value: "expense" },
               ]}
             />
           </Col>
-          <Col xs={24} sm={12} md={12} style={{ textAlign: "right" }}>
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>Thêm Giao Dịch</Button>
+          <Col xs={24} sm={12} md={{ span: 4, offset: 10 }} style={{ textAlign: "right" }}>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+              Thêm Giao Dịch
+            </Button>
           </Col>
         </Row>
 
         <Table
           columns={columns}
-          dataSource={displayTransactions}
+          dataSource={transactions}
           rowKey="id"
           loading={loading}
-          pagination={{ pageSize: 10, showSizeChanger: true }}
+          pagination={{
+            current: pagination.page,
+            pageSize: pagination.limit,
+            total: pagination.total,
+            showSizeChanger: true,
+            showTotal: (total) => `Tổng ${total} giao dịch`,
+          }}
+          onChange={handleTableChange}
           scroll={{ x: 768 }}
         />
       </Card>
 
       <Modal
-        title={editingId !== null ? "Sửa Giao Dịch" : "Thêm Giao Dịch"}
+        title={editingId ? "Sửa Giao Dịch" : "Thêm Giao Dịch"}
         open={isModalOpen}
         onOk={handleSave}
-        onCancel={() => setIsModalOpen(false)}
+        onCancel={() => { setIsModalOpen(false); form.resetFields(); }}
         destroyOnClose
+        okText="Lưu"
+        cancelText="Hủy"
       >
         <Form form={form} layout="vertical">
-          <Form.Item label="Loại Giao Dịch" name="type" rules={[{ required: true, message: "Chọn loại giao dịch" }]}>
-            <Select
-              onChange={(value) => {
-                setSelectedType(value);
-                form.setFieldsValue({ categoryId: undefined });
-              }}
-              options={[
-                { label: "Thu nhập", value: "income" },
-                { label: "Chi tiêu", value: "expense" },
-              ]}
-            />
+          <Form.Item label="Loại" name="type" rules={[{ required: true, message: "Chọn loại" }]}>
+            <Select options={[
+              { label: "Thu nhập", value: "income" },
+              { label: "Chi tiêu", value: "expense" },
+            ]} />
           </Form.Item>
 
           <Form.Item label="Số Tiền" name="amount" rules={[{ required: true, message: "Nhập số tiền" }]}>
             <Input type="number" placeholder="0" min={0} />
           </Form.Item>
 
-          <Form.Item label="Danh Mục" name="categoryId">
+          <Form.Item label="Danh Mục" name="category_id">
             <Select
               placeholder="Chọn danh mục"
               allowClear
-              options={
-                selectedType
-                  ? categories
-                      .filter(c => c.type === selectedType)
-                      .map(c => ({ value: c.id, label: c.nameVi || c.name }))
-                  : categories.map(c => ({ value: c.id, label: c.nameVi || c.name }))
-              }
+              options={categories.map((c) => ({ value: c.id, label: c.name }))}
             />
           </Form.Item>
 
-          <Form.Item label="Ngày" name="date" rules={[{ required: true, message: "Chọn ngày" }]}>
+          <Form.Item label="Ngày" name="transaction_date" rules={[{ required: true, message: "Chọn ngày" }]}>
             <DatePicker format="DD/MM/YYYY" style={{ width: "100%" }} />
           </Form.Item>
 
-          <Form.Item label="Ghi Chú" name="note">
-            <Input placeholder="Ghi chú về giao dịch" />
+          <Form.Item label="Mô tả" name="description">
+            <Input.TextArea placeholder="Mô tả giao dịch" rows={2} />
           </Form.Item>
         </Form>
       </Modal>
