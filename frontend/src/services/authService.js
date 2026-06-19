@@ -1,8 +1,8 @@
 import api from '../api/axios.js';
 
 export const authService = {
-  login: (email, password) => api.post('/auth/login', { email, password }),
-  register: (fullname, email, password) => api.post('/auth/register', { fullname, email, password }),
+  login: (username, password) => api.post('/auth/login', { username, password }),
+  register: (username, email, password) => api.post('/auth/register', { username, email, password }),
   refresh: (refreshToken) => api.post('/auth/refresh', { refreshToken }),
   autoLogin: () => api.post('/auth/auto-login'),
   getMe: () => api.get('/auth/me'),

@@ -26,6 +26,7 @@ export default function LoginPage() {
   const onFinish = async (values) => {
     try {
       setLoading(true);
+<<<<<<< HEAD
 
       // 1. Kiểm tra nếu trùng khớp dữ liệu với demoUser thì đăng nhập thẳng (Mock Login)
       if (values.email === demoUser.email && values.password === demoUser.password) {
@@ -40,6 +41,9 @@ export default function LoginPage() {
 
       // 2. Nếu không khớp tài khoản demoUser, tiếp tục xử lý gọi API thật từ server như cũ
       const response = await authService.login(values.email, values.password);
+=======
+      const response = await authService.login(values.username, values.password);
+>>>>>>> 8ccb06107d883323e28dcd750c8b3f15653586d1
       const { accessToken, refreshToken, user } = response.data;
 
       setToken(accessToken);
@@ -95,14 +99,17 @@ export default function LoginPage() {
 
           <Form layout="vertical" onFinish={onFinish} className="auth-form">
             <Form.Item
-              label="Email"
-              name="email"
+              label="Tên đăng nhập"
+              name="username"
               rules={[
-                { required: true, message: "Vui lòng nhập email" },
-                { type: "email", message: "Email không hợp lệ" },
+                { required: true, message: "Vui lòng nhập tên đăng nhập" },
               ]}
             >
+<<<<<<< HEAD
               <Input prefix={<MailOutlined />} placeholder="Nhập email của bạn" size="large" />
+=======
+              <Input prefix={<UserOutlined />} placeholder="Nhập tên đăng nhập" size="large" />
+>>>>>>> 8ccb06107d883323e28dcd750c8b3f15653586d1
             </Form.Item>
 
             <Form.Item
