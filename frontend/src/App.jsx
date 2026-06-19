@@ -8,6 +8,7 @@ import CaiDatPage from "./pages/CaiDatPage.jsx";
 import ThongBaoPage from "./pages/ThongBaoPage.jsx";
 import ThemGiaoDich from "./pages/ThemGiaoDich.jsx";
 import AccountsPage from "./pages/AccountsPage.jsx";
+import NotFoundPage from "./pages/NotFoundPage.jsx";
 import ProtectedLayout from "./layouts/ProtectedLayout.jsx";
 import { isAuthenticated } from "./lib/auth.js";
 
@@ -28,7 +29,7 @@ export default function App() {
       </Route>
 
       <Route path="/" element={<Navigate to={isAuthenticated() ? "/dashboard" : "/login"} replace />} />
-      <Route path="*" element={<Navigate to={isAuthenticated() ? "/dashboard" : "/login"} replace />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }
