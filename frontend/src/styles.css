@@ -1,7 +1,53 @@
 * {
   box-sizing: border-box;
 }
+.ant-picker {
+  background: #111827 !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  color: white !important;
+}
 
+.ant-picker input {
+  color: white !important;
+}
+
+.ant-picker-suffix {
+  color: #94a3b8 !important;
+}
+/* TABLE DARK MODE */
+
+.ant-table {
+  background: #0b1220 !important;
+  color: #fff !important;
+}
+
+.ant-table-container {
+  background: #0b1220 !important;
+}
+
+.ant-table-thead > tr > th {
+  background: #111827 !important;
+  color: #fff !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.ant-table-tbody > tr > td {
+  background: #0b1220 !important;
+  color: #fff !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background: #111827 !important;
+}
+
+.ant-pagination-item {
+  background: #111827 !important;
+}
+
+.ant-pagination-item a {
+  color: white !important;
+}
 body {
   margin: 0;
   background: #f4f6f8;
