@@ -10,7 +10,6 @@ const GET_CATEGORIES = gql`
       id
       name
       type
-      createdAt
     }
   }
 `;
@@ -55,11 +54,12 @@ export default function Categories() {
 
   const { loading, refetch } = useQuery(GET_CATEGORIES, {
     onCompleted: (data) => {
+      console.log("Categories loaded:", data);
       setCategories(data.categoriesAll || []);
     },
     onError: (error) => {
-      message.error("Không thể tải danh sách danh mục");
       console.error("Query error:", error);
+      message.error("Không thể tải danh sách danh mục: " + error.message);
     },
   });
 
@@ -84,37 +84,42 @@ export default function Categories() {
 
   const handleDelete = async (id) => {
     try {
-      await deleteCategory({ variables: { id } });
+      console.log("Deleting category:", id);
+      const result = await deleteCategory({ variables: { id } });
+      console.log("Delete result:", result);
       message.success("Xóa danh mục thành công");
-      refetch();
+      await refetch();
     } catch (error) {
-      message.error("Không thể xóa danh mục");
       console.error("Delete error:", error);
+      message.error("Không thể xóa danh mục: " + error.message);
     }
   };
 
   const handleSubmit = async (values) => {
     try {
+      console.log("Submitting:", values, "editing:", editingCategory);
       if (editingCategory) {
-        await updateCategory({
+        const result = await updateCategory({
           variables: {
             id: editingCategory.id,
             ...values,
           },
         });
+        console.log("Update result:", result);
         message.success("Cập nhật danh mục thành công");
       } else {
-        await createCategory({
+        const result = await createCategory({
           variables: values,
         });
+        console.log("Create result:", result);
         message.success("Thêm danh mục thành công");
       }
       setModalVisible(false);
       form.resetFields();
-      refetch();
+      await refetch();
     } catch (error) {
-      message.error(error.message || "Có lỗi xảy ra");
       console.error("Submit error:", error);
+      message.error(error.message || "Có lỗi xảy ra");
     }
   };
 
@@ -136,17 +141,11 @@ export default function Categories() {
       onFilter: (value, record) => record.type === value,
       render: (type) => (
         <Tag color={type === "income" ? "green" : "red"}>
-          {type === "income" ? "Income" : "Expense"}
+          {type === "income" ? "Thu nhập" : "Chi tiêu"}
         </Tag>
       ),
     },
-    {
-      title: "Created At",
-      dataIndex: "createdAt",
-      key: "createdAt",
-      render: (date) => (date ? new Date(date).toLocaleDateString("vi-VN") : "-"),
-      sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
-    },
+    
     {
       title: "Actions",
       key: "actions",

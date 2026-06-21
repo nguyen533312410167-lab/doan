@@ -75,7 +75,6 @@ class CategoryType(DjangoObjectType):
     class Meta:
         model = Category
         fields = ("id", "name", "name_vi", "type", "icon", "sort_order", "is_active")
-        model = Category
 
 
 # ──── Transaction ────
