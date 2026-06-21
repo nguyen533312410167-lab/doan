@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard.jsx";
 import Transactions from "./pages/Transactions.jsx";
 import Goals from "./pages/Goals.jsx";
 import ThemGiaoDich from "./pages/ThemGiaoDich.jsx";
+import Categories from "./pages/Categories.jsx";
 import ProtectedLayout from "./layouts/ProtectedLayout.jsx";
 import { isAuthenticated } from "./lib/auth.js";
 
@@ -54,9 +55,17 @@ export default function App() {
           </ProtectedLayout>
         }
       />
-      <Route 
-        path="/" 
-        element={<Navigate to={isAuthenticated() ? "/dashboard" : "/login"} replace />} 
+      <Route
+        path="/categories"
+        element={
+          <ProtectedLayout>
+            <Categories />
+          </ProtectedLayout>
+        }
+      />
+      <Route
+        path="/"
+        element={<Navigate to={isAuthenticated() ? "/dashboard" : "/login"} replace />}
       />
     </Routes>
   );

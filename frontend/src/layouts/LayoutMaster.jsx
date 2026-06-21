@@ -7,6 +7,7 @@ import {
   SwapOutlined,
   BankOutlined,
   UserOutlined,
+  AppstoreOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@apollo/client";
@@ -58,6 +59,15 @@ export default function LayoutMaster({ children }) {
       label: "Mục tiêu tiết kiệm",
       onClick: () => {
         navigate("/goals");
+        setDrawerOpen(false);
+      },
+    },
+    {
+      key: "/categories",
+      icon: <AppstoreOutlined />,
+      label: "Danh mục",
+      onClick: () => {
+        navigate("/categories");
         setDrawerOpen(false);
       },
     },

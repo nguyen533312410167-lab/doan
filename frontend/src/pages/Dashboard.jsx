@@ -1,5 +1,17 @@
-import { Row, Col, Statistic, Card, Table, DatePicker, message, Button, ConfigProvider, theme } from "antd";
-import { DollarOutlined } from "@ant-design/icons";
+import {
+  Row,
+  Col,
+  Statistic,
+  Card,
+  Table,
+  DatePicker,
+  message,
+  Button,
+  ConfigProvider,
+  theme,
+  InputNumber,
+  Alert
+} from "antd";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { useState, useEffect, useCallback } from "react";
 import dayjs from "dayjs";
@@ -23,25 +35,46 @@ async function graphqlRequest(query, variables = {}) {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-const isIncome = (type) => type?.toLowerCase() === "income";
+const isIncome = (type) => {
+  if (typeof type === "string") return type.toLowerCase() === "income";
+  if (type && typeof type === "object") {
+    return type.name?.toLowerCase?.() === "income" || type.value?.toLowerCase?.() === "income";
+  }
+  return false;
+};
+
+const safeNum = (v) => {
+  const n = Number(v);
+  return isNaN(n) || !isFinite(n) ? 0 : n;
+};
 
 const computeStats = (txs) => {
-  const income = txs.filter(isIncome).reduce((s, t) => s + parseFloat(t.amount), 0);
-  const expense = txs.filter((t) => !isIncome(t.type)).reduce((s, t) => s + parseFloat(t.amount), 0);
-  return { income, expense, balance: income - expense };
+  const income = txs
+    .filter((t) => isIncome(t.type))
+    .reduce((s, t) => s + safeNum(t.amount), 0);
+
+  const expense = txs
+    .filter((t) => !isIncome(t.type))
+    .reduce((s, t) => s + safeNum(t.amount), 0);
+
+  return {
+    income,
+    expense,
+    balance: income - expense,
+  };
 };
 
 const buildExpenseByCategory = (txs, mergedCategoryMap) => {
   const map = {};
   txs.filter((t) => !isIncome(t.type)).forEach((t) => {
     const catName = t.categoryName || mergedCategoryMap[t.category?.name] || "Khác";
-    map[catName] = (map[catName] || 0) + parseFloat(t.amount);
+    map[catName] = (map[catName] || 0) + safeNum(t.amount);
   });
   const total = Object.values(map).reduce((s, v) => s + v, 0) || 1;
   return Object.entries(map).map(([key, value]) => ({ name: key, value, percentage: (value / total) * 100 }));
 };
 
-const formatCurrency = (v) => `${Number(v).toLocaleString("vi-VN")} ₫`;
+const formatCurrency = (v) => `${safeNum(v).toLocaleString("vi-VN")} ₫`;
 
 const COLORS = ["#22c55e", "#16a34a", "#84cc16", "#f59e0b"];
 
@@ -57,6 +90,7 @@ const cardProps = {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function Dashboard() {
+  
   const { messageApi, contextHolder } = message.useMessage();
   const { token: darkToken } = theme.useToken();
 
@@ -106,6 +140,7 @@ export default function Dashboard() {
   });
 
   const stats = computeStats(currentMonthTxns);
+  const savingsAmount = Math.max(stats.balance, 0);
   const expenseByCategory = buildExpenseByCategory(currentMonthTxns, mergedCategoryMap);
   const savingsPercentage = stats.income > 0 ? (stats.balance / stats.income) * 100 : 0;
 
@@ -139,7 +174,6 @@ export default function Dashboard() {
 
   // Mutation
   const handleSaveIncome = async () => {
-    // incomeInput is no longer used in UI; kept as mutation placeholder per spec
     if (!incomeInput || incomeInput <= 0) {
       messageApi.warning("Vui lòng nhập số tiền hợp lệ");
       return;
@@ -171,7 +205,6 @@ export default function Dashboard() {
     setSaving(false);
   };
 
-
   // Table columns (shared style)
   const tableDarkStyle = {
     background: "#0b1220",
@@ -199,20 +232,25 @@ export default function Dashboard() {
     },
     {
       title: "Số tiền",
+      dataIndex: "amount",
       key: "amount",
-      render: (v, record) => (
-        <span
-          style={{
-            color: isIncome(record.type) ? "#22c55e" : "#ef4444",
-            fontWeight: 700,
-            fontSize: 15,
-          }}
-        >
-          {isIncome(record.type) ? "+" : "-"}
-          {formatCurrency(v)}
-        </span>
-      ),
-    },
+      render: (amount, record) => {
+    const value = safeNum(amount);
+
+    return (
+      <span
+        style={{
+          color: isIncome(record.type) ? "#22c55e" : "#ef4444",
+          fontWeight: 700,
+          fontSize: 15,
+        }}
+      >
+        {isIncome(record.type) ? "+" : "-"}
+        {formatCurrency(value)}
+      </span>
+    );
+  },
+},
   ];
 
   // History columns (+balance)
@@ -232,7 +270,7 @@ export default function Dashboard() {
       title: "Số dư",
       key: "balance",
       render: (_, row) => {
-        const bal = row.income - row.expense;
+        const bal = safeNum(row.income) - safeNum(row.expense);
         return (
           <span style={{ color: bal >= 0 ? "#22c55e" : "#ef4444", fontWeight: 700 }}>
             {bal >= 0 ? "+" : ""}
@@ -276,7 +314,7 @@ export default function Dashboard() {
       <div
         style={{
           padding: "24px",
-          background: darkToken.colorBgContainer,
+          background: "#0b0f14",
           minHeight: "100vh",
           color: "#fff",
         }}
@@ -360,51 +398,73 @@ export default function Dashboard() {
             </div>
           </div>
         </Card>
+        {/* ─── ALERTS ─── */}
+        {alerts.length > 0 && (
+          <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+            {alerts.map((a, i) => (
+              <Col xs={24} key={i}>
+                <Alert
+                  type={a.type}
+                  showIcon
+                  message={a.message}
+                  style={{ borderRadius: 12 }}
+                />
+              </Col>
+            ))}
+          </Row>
+        )}
+
+         
 
         {/* ─── STATS CARDS ─── */}
         <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
-          <Col xs={24} sm={12} lg={6}>
-            <Card {...cardProps}>
-              <Statistic
-                title={<span style={{ color: "#94a3b8" }}>Số dư</span>}
-                value={stats.balance}
-                valueStyle={{ color: "#22c55e", fontWeight: 700 }}
-                formatter={(v) => formatCurrency(v)}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card {...cardProps}>
-              <Statistic
-                title={<span style={{ color: "#94a3b8" }}>Thu nhập</span>}
-                value={stats.income}
-                valueStyle={{ color: "#22c55e", fontWeight: 700 }}
-                formatter={(v) => formatCurrency(v)}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card {...cardProps}>
-              <Statistic
-                title={<span style={{ color: "#94a3b8" }}>Chi tiêu</span>}
-                value={stats.expense}
-                valueStyle={{ color: "#ef4444", fontWeight: 700 }}
-                formatter={(v) => formatCurrency(v)}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card {...cardProps}>
-              <Statistic
-                title={<span style={{ color: "#94a3b8" }}>Tiết kiệm</span>}
-                value={savingsPercentage}
-                precision={1}
-                suffix="%"
-                valueStyle={{ color: "#3b82f6", fontWeight: 700 }}
-              />
-            </Card>
-          </Col>
-        </Row>
+  <Col xs={24} sm={12} lg={6}>
+    <Card {...cardProps}>
+      <Statistic
+        title={<span style={{ color: "#94a3b8" }}>Thu nhập</span>}
+        value={stats.income}
+        valueStyle={{ color: "#22c55e", fontWeight: 700 }}
+        formatter={(v) => formatCurrency(v)}
+      />
+    </Card>
+  </Col>
+
+  <Col xs={24} sm={12} lg={6}>
+    <Card {...cardProps}>
+      <Statistic
+        title={<span style={{ color: "#94a3b8" }}>Chi tiêu</span>}
+        value={stats.expense}
+        valueStyle={{ color: "#ef4444", fontWeight: 700 }}
+        formatter={(v) => formatCurrency(v)}
+      />
+    </Card>
+  </Col>
+
+  <Col xs={24} sm={12} lg={6}>
+    <Card {...cardProps}>
+      <Statistic
+        title={<span style={{ color: "#94a3b8" }}>Số dư</span>}
+        value={stats.balance}
+        valueStyle={{ color: "#3b82f6", fontWeight: 700 }}
+        formatter={(v) => formatCurrency(v)}
+      />
+    </Card>
+  </Col>
+
+  <Col xs={24} sm={12} lg={6}>
+    <Card {...cardProps}>
+      <Statistic
+        title={<span style={{ color: "#94a3b8" }}>Tiết kiệm</span>}
+        value={savingsAmount}
+        valueStyle={{
+          color: savingsAmount > 0 ? "#22c55e" : "#ef4444",
+          fontWeight: 700,
+        }}
+        formatter={(v) => formatCurrency(v)}
+      />
+    </Card>
+  </Col>
+</Row>
 
         {/* ─── CHARTS ─── */}
         <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
@@ -462,56 +522,45 @@ export default function Dashboard() {
                 Thu & Chi
               </h3>
               <ResponsiveContainer width="100%" height={280}>
-                <BarChart
-                  data={[
-                    { name: "Thu", value: stats.income },
-                    { name: "Chi", value: stats.expense },
-                  ]}
-                  margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                  <XAxis
-                    dataKey="name"
-                    tick={{ fill: "#94a3b8", fontSize: 13 }}
-                    axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
-                  />
-                  <YAxis
-                    tick={{ fill: "#94a3b8", fontSize: 12 }}
-                    axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
-                    tickFormatter={(v) => `${(v / 1e6).toFixed(0)}M`}
-                  />
-                  <Tooltip
-                    formatter={(v) => formatCurrency(v)}
-                    contentStyle={{
-                      background: "#1e293b",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      borderRadius: 8,
-                      color: "#fff",
-                    }}
-                  />
-                  <Legend wrapperStyle={{ color: "#94a3b8" }} />
-                  <Bar dataKey="value" fill="#22c55e" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+  <BarChart
+    data={[
+      { name: "Thu", value: stats.income },
+      { name: "Chi", value: stats.expense },
+    ]}
+    margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+  >
+    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+
+    <XAxis
+      dataKey="name"
+      tick={{ fill: "#94a3b8", fontSize: 16, fontWeight: 700 }}
+      axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
+    />
+
+    <YAxis
+      tick={{ fill: "#94a3b8", fontSize: 12 }}
+      axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
+      tickFormatter={(v) => `${(v / 1e6).toFixed(0)}M`}
+    />
+
+    <Tooltip
+      formatter={(v) => formatCurrency(v)}
+      contentStyle={{
+        background: "#1e293b",
+        border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 8,
+        color: "#fff",
+      }}
+    />
+
+    <Bar dataKey="value" fill="#22c55e" radius={[6, 6, 0, 0]} />
+  </BarChart>
+</ResponsiveContainer>
             </Card>
           </Col>
         </Row>
 
-        {/* ─── ALERTS ─── */}
-        {alerts.length > 0 && (
-          <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-            {alerts.map((a, i) => (
-              <Col xs={24} key={i}>
-                <Alert
-                  type={a.type}
-                  showIcon
-                  message={a.message}
-                  style={{ borderRadius: 12 }}
-                />
-              </Col>
-            ))}
-          </Row>
-        )}
+        
 
         {/* ─── RECENT TRANSACTIONS (top 5) ─── */}
         <Card

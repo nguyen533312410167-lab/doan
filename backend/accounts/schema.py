@@ -316,6 +316,46 @@ class CreateCategory(graphene.Mutation):
         return CreateCategory(category=category)
 
 
+class UpdateCategory(graphene.Mutation):
+    class Arguments:
+        id = graphene.ID(required=True)
+        name = graphene.String()
+        name_vi = graphene.String()
+        type = graphene.String()
+        icon = graphene.String()
+        sort_order = graphene.Int()
+        is_active = graphene.Boolean()
+
+    category = graphene.Field(CategoryType)
+
+    @classmethod
+    def mutate(cls, root, info, id, **kwargs):
+        require_staff(info)
+        try:
+            category = Category.objects.get(pk=id)
+        except Category.DoesNotExist as exc:
+            raise GraphQLError("Category not found.") from exc
+
+        for field in ("name", "name_vi", "type", "icon", "sort_order", "is_active"):
+            if field in kwargs and kwargs[field] is not None:
+                setattr(category, field, kwargs[field])
+        category.save()
+        return UpdateCategory(category=category)
+
+
+class DeleteCategory(graphene.Mutation):
+    class Arguments:
+        id = graphene.ID(required=True)
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, id):
+        require_staff(info)
+        deleted, _ = Category.objects.filter(pk=id).delete()
+        return DeleteCategory(ok=deleted > 0)
+
+
 # ──── Transaction Mutations ────
 
 class CreateTransaction(graphene.Mutation):
@@ -595,6 +635,8 @@ class Mutation(graphene.ObjectType):
 
     # Category mutations
     create_category = CreateCategory.Field()
+    update_category = UpdateCategory.Field()
+    delete_category = DeleteCategory.Field()
 
     # Transaction mutations
     create_transaction = CreateTransaction.Field()
