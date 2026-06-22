@@ -34,6 +34,8 @@ export default function LayoutMaster({ children }) {
     navigate("/login", { replace: true });
   };
 
+  const isStaff = data?.me?.isStaff || false;
+
   const menuItems = [
     {
       key: "/dashboard",
@@ -62,15 +64,19 @@ export default function LayoutMaster({ children }) {
         setDrawerOpen(false);
       },
     },
-    {
-      key: "/categories",
-      icon: <AppstoreOutlined />,
-      label: "Danh mục",
-      onClick: () => {
-        navigate("/categories");
-        setDrawerOpen(false);
-      },
-    },
+    ...(isStaff
+      ? [
+          {
+            key: "/categories",
+            icon: <AppstoreOutlined />,
+            label: "Danh mục",
+            onClick: () => {
+              navigate("/categories");
+              setDrawerOpen(false);
+            },
+          },
+        ]
+      : []),
   ];
 
   const handleNavigateAccounts = () => {

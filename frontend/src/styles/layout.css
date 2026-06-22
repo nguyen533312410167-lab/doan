@@ -44,12 +44,12 @@
 }
 
 .layout-header {
-  background: white;
+  background: #0b0f14;
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
   height: 64px;
 }
 
@@ -72,7 +72,7 @@
 .layout-main-content {
   flex: 1;
   overflow-y: auto;
-  background: #f5f5f5;
+  background: #0b0f14;
 }
 
 .mobile-drawer {

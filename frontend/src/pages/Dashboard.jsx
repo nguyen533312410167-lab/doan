@@ -553,7 +553,10 @@ export default function Dashboard() {
       }}
     />
 
-    <Bar dataKey="value" fill="#22c55e" radius={[6, 6, 0, 0]} />
+    <Bar dataKey="value" fill="transparent" stroke="#22c55e" strokeWidth={0} radius={[6, 6, 0, 0]}>
+      <Cell fill="#22c55e" stroke="#22c55e" />
+      <Cell fill="#ef4444" stroke="#ef4444" />
+    </Bar>
   </BarChart>
 </ResponsiveContainer>
             </Card>

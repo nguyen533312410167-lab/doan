@@ -1,8 +1,10 @@
-import { useState } from "react";
-import { Table, Button, Modal, Form, Input, Select, Tag, Popconfirm, message, Space, Card } from "antd";
+import { useState, useEffect } from "react";
+import { Table, Button, Modal, Form, Input, Select, Tag, Popconfirm, message, Space, Card, ConfigProvider, theme } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useQuery, useMutation } from "@apollo/client";
 import { gql } from "@apollo/client";
+import { useNavigate } from "react-router-dom";
+import { ME_QUERY } from "../graphql/account.js";
 
 const GET_CATEGORIES = gql`
   query GetCategories {
@@ -47,10 +49,24 @@ const DELETE_CATEGORY = gql`
 `;
 
 export default function Categories() {
+  const navigate = useNavigate();
   const [categories, setCategories] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
   const [form] = Form.useForm();
+
+  const { data, loading: meLoading } = useQuery(ME_QUERY, {
+    errorPolicy: "ignore",
+  });
+
+  const isStaff = data?.me?.isStaff || false;
+
+  useEffect(() => {
+    if (!meLoading && !isStaff) {
+      message.error("Bạn không có quyền truy cập trang này");
+      navigate("/dashboard", { replace: true });
+    }
+  }, [meLoading, isStaff, navigate]);
 
   const { loading, refetch } = useQuery(GET_CATEGORIES, {
     onCompleted: (data) => {
@@ -175,41 +191,81 @@ export default function Categories() {
   ];
 
   return (
-    <div style={{ padding: "24px" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "24px",
-        }}
-      >
-        <h2 style={{ margin: 0, color: "#fff", fontSize: "28px", fontWeight: 700 }}>
-          Quản Lý Danh Mục
-        </h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-          + Add Category
-        </Button>
-      </div>
-
-      <Card
-        style={{
-          background: "#0b1220",
-          borderRadius: 20,
-          border: "1px solid rgba(255,255,255,0.06)",
-        }}
-      >
-        <Table
-          rowKey="id"
-          columns={columns}
-          dataSource={categories}
-          loading={loading}
-          pagination={{ pageSize: 10, showSizeChanger: true }}
-          locale={{
-            emptyText: "Chưa có danh mục nào",
+    <ConfigProvider
+      theme={{
+        algorithm: theme.darkAlgorithm,
+        token: {
+          colorPrimary: "#3b82f6",
+          borderRadius: 12,
+        },
+        components: {
+          Table: {
+            headerBg: "#111827",
+            headerColor: "#ffffff",
+            rowHoverBg: "#111827",
+            bodyBg: "#0b1220",
+            colorText: "#ffffff",
+            borderColor: "rgba(255,255,255,0.08)",
+          },
+          Card: {
+            colorBgContainer: "#0b1220",
+          },
+          Modal: {
+            contentBg: "#0b1220",
+            headerBg: "#111827",
+            titleColor: "#ffffff",
+          },
+          Form: {
+            labelColor: "#94a3b8",
+          },
+          Input: {
+            colorBgContainer: "#111827",
+            colorText: "#ffffff",
+            colorBorder: "rgba(255,255,255,0.12)",
+          },
+          Select: {
+            colorBgContainer: "#111827",
+            colorText: "#ffffff",
+            colorBorder: "rgba(255,255,255,0.12)",
+          },
+        },
+      }}
+    >
+      <div style={{ padding: "24px", background: "#0b0f14", minHeight: "100vh", color: "#fff" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "24px",
           }}
-        />
-      </Card>
+        >
+          <h2 style={{ margin: 0, color: "#fff", fontSize: "28px", fontWeight: 700 }}>
+            Quản Lý Danh Mục
+          </h2>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+            + Add Category
+          </Button>
+        </div>
+
+        <Card
+          style={{
+            background: "#0b1220",
+            borderRadius: 20,
+            border: "1px solid rgba(255,255,255,0.06)",
+          }}
+        >
+          <Table
+            rowKey="id"
+            columns={columns}
+            dataSource={categories}
+            loading={loading}
+            pagination={{ pageSize: 10, showSizeChanger: true }}
+            locale={{
+              emptyText: "Chưa có danh mục nào",
+            }}
+          />
+        </Card>
 
       <Modal
         title={editingCategory ? "Sửa Danh Mục" : "Thêm Danh Mục"}
@@ -219,6 +275,8 @@ export default function Categories() {
           form.resetFields();
         }}
         footer={null}
+        style={{ top: 20 }}
+        cancelButtonProps={{ style: { color: "#fff", borderColor: "rgba(255,255,255,0.12)" } }}
       >
         <Form
           form={form}
@@ -266,5 +324,6 @@ export default function Categories() {
         </Form>
       </Modal>
     </div>
+    </ConfigProvider>
   );
 }

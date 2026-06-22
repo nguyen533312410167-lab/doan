@@ -1,4 +1,4 @@
-import { Table, Button, Modal, Form, Input, Select, DatePicker, Space, Row, Col, Card, message } from "antd";
+import { Table, Button, Modal, Form, Input, Select, DatePicker, Space, Row, Col, Card, message, ConfigProvider, theme } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { useMutation, useQuery } from "@apollo/client";
@@ -184,11 +184,63 @@ console.log(transactions);
   ];
 
   return (
-    <div style={{ padding: "24px" }}>
-      {contextHolder}
-      <h1>Quản Lý Giao Dịch</h1>
+    <ConfigProvider
+      theme={{
+        algorithm: theme.darkAlgorithm,
+        token: {
+          colorPrimary: "#3b82f6",
+          borderRadius: 12,
+        },
+        components: {
+          Table: {
+            headerBg: "#111827",
+            headerColor: "#ffffff",
+            rowHoverBg: "#111827",
+            bodyBg: "#0b1220",
+            colorText: "#ffffff",
+            borderColor: "rgba(255,255,255,0.08)",
+          },
+          Card: {
+            colorBgContainer: "#0b1220",
+          },
+          Modal: {
+            contentBg: "#0b1220",
+            headerBg: "#111827",
+            titleColor: "#ffffff",
+          },
+          Form: {
+            labelColor: "#94a3b8",
+          },
+          Input: {
+            colorBgContainer: "#111827",
+            colorText: "#ffffff",
+            colorBorder: "rgba(255,255,255,0.12)",
+          },
+          Select: {
+            colorBgContainer: "#111827",
+            colorText: "#ffffff",
+            colorBorder: "rgba(255,255,255,0.12)",
+          },
+          DatePicker: {
+            colorBgContainer: "#111827",
+            colorText: "#ffffff",
+            colorBorder: "rgba(255,255,255,0.12)",
+          },
+        },
+      }}
+    >
+      <div style={{ padding: "24px", background: "#0b0f14", minHeight: "100vh", color: "#fff" }}>
+        {contextHolder}
+        <h1 style={{ color: "#fff", fontSize: "28px", fontWeight: 700, marginBottom: "24px" }}>Quản Lý Giao Dịch</h1>
 
-      <Card style={{ marginBottom: "16px" }}>
+        <Card
+          style={{
+            background: "#0b1220",
+            borderRadius: 20,
+            border: "1px solid rgba(255,255,255,0.06)",
+            marginBottom: "16px",
+          }}
+        >
         <Row gutter={[16, 16]} style={{ marginBottom: "16px" }}>
           <Col xs={24} sm={12} md={6}>
             <Input.Search
@@ -226,11 +278,20 @@ console.log(transactions);
       </Card>
 
       <Modal
+        style={{ top: 20 }}
         title={editingId !== null ? "Sửa Giao Dịch" : "Thêm Giao Dịch"}
         open={isModalOpen}
         onOk={handleSave}
         onCancel={() => setIsModalOpen(false)}
         destroyOnClose
+        cancelButtonProps={{
+          style: {
+            color: "#fff",
+            backgroundColor: "rgba(255,255,255,0.08)",
+            borderColor: "rgba(255,255,255,0.12)",
+          },
+        }}
+        okButtonProps={{ style: { backgroundColor: "#3b82f6", borderColor: "#3b82f6" } }}
       >
         <Form form={form} layout="vertical">
           <Form.Item label="Loại Giao Dịch" name="type" rules={[{ required: true, message: "Chọn loại giao dịch" }]}>
@@ -274,5 +335,6 @@ console.log(transactions);
         </Form>
       </Modal>
     </div>
+    </ConfigProvider>
   );
 }
