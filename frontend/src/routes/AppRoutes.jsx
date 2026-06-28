@@ -4,6 +4,7 @@ import RegisterPage from "../pages/RegisterPage.jsx";
 import Dashboard from "../pages/Dashboard.jsx";
 import Transactions from "../pages/Transactions.jsx";
 import Goals from "../pages/Goals.jsx";
+import NotificationsPage from "../pages/NotificationsPage.jsx";
 import ProtectedLayout from "../layouts/ProtectedLayout.jsx";
 import AccountsPage from "../pages/AccountsPage.jsx";
 
@@ -44,6 +45,14 @@ export default function AppRoutes() {
         element={
           <ProtectedLayout>
             <Goals />
+          </ProtectedLayout>
+        }
+      />
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedLayout>
+            <NotificationsPage />
           </ProtectedLayout>
         }
       />

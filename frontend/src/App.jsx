@@ -7,7 +7,9 @@ import Transactions from "./pages/Transactions.jsx";
 import Goals from "./pages/Goals.jsx";
 import ThemGiaoDich from "./pages/ThemGiaoDich.jsx";
 import Categories from "./pages/Categories.jsx";
+import AdminNotifications from "./pages/AdminNotifications.jsx";
 import ProtectedLayout from "./layouts/ProtectedLayout.jsx";
+import AdminRoute from "./layouts/AdminRoute.jsx";
 import { isAuthenticated } from "./lib/auth.js";
 
 export default function App() {
@@ -60,6 +62,16 @@ export default function App() {
         element={
           <ProtectedLayout>
             <Categories />
+          </ProtectedLayout>
+        }
+      />
+      <Route
+        path="/admin-notifications"
+        element={
+          <ProtectedLayout>
+            <AdminRoute>
+              <AdminNotifications />
+            </AdminRoute>
           </ProtectedLayout>
         }
       />

@@ -12,6 +12,8 @@ import {
   Alert,
   Avatar,
   Button,
+  Card,
+  ConfigProvider,
   Form,
   Input,
   Modal,
@@ -22,9 +24,11 @@ import {
   Typography,
   Upload,
   message,
+  theme,
 } from "antd";
 
 import { CREATE_USER, DELETE_USER, ME, UPDATE_ME, UPDATE_USER, UPLOAD_AVATAR, USERS } from "../graphql/account.js";
+import { useNotificationRefresh } from "../contexts/NotificationContext.jsx";
 
 const { Title, Text } = Typography;
 
@@ -34,6 +38,7 @@ function userFullName(user) {
 
 export default function AccountsPage() {
   const [messageApi, contextHolder] = message.useMessage();
+  const { refreshNotifications } = useNotificationRefresh();
   const [search, setSearch] = useState("");
   const [editingUser, setEditingUser] = useState(null);
   const [isCreateOpen, setCreateOpen] = useState(false);
@@ -46,11 +51,26 @@ export default function AccountsPage() {
     skip: !meQuery.data?.me?.isStaff,
   });
 
-  const [createUser, createState] = useMutation(CREATE_USER, { refetchQueries: ["Users"] });
-  const [updateUser, updateState] = useMutation(UPDATE_USER, { refetchQueries: ["Users", "Me"] });
-  const [updateMe, updateMeState] = useMutation(UPDATE_ME, { refetchQueries: ["Me"] });
-  const [uploadAvatar, uploadAvatarState] = useMutation(UPLOAD_AVATAR, { refetchQueries: ["Users", "Me"] });
-  const [deleteUser] = useMutation(DELETE_USER, { refetchQueries: ["Users"] });
+  const [createUser, createState] = useMutation(CREATE_USER, {
+    refetchQueries: ["Users"],
+    onCompleted: () => refreshNotifications(),
+  });
+  const [updateUser, updateState] = useMutation(UPDATE_USER, {
+    refetchQueries: ["Users", "Me"],
+    onCompleted: () => refreshNotifications(),
+  });
+  const [updateMe, updateMeState] = useMutation(UPDATE_ME, {
+    refetchQueries: ["Me"],
+    onCompleted: () => refreshNotifications(),
+  });
+  const [uploadAvatar, uploadAvatarState] = useMutation(UPLOAD_AVATAR, {
+    refetchQueries: ["Users", "Me"],
+    onCompleted: () => refreshNotifications(),
+  });
+  const [deleteUser] = useMutation(DELETE_USER, {
+    refetchQueries: ["Users"],
+    onCompleted: () => refreshNotifications(),
+  });
 
   const me = meQuery.data?.me;
   const users = usersQuery.data?.users || [];
@@ -179,152 +199,186 @@ export default function AccountsPage() {
   }
 
   return (
-    <div className="page-stack">
-      {contextHolder}
-      <section className="page-panel">
-        <div className="section-head">
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <div>
-              <Title level={3} style={{ margin: 0 }}>Hồ sơ của tôi</Title>
-              <Text type="secondary">{me?.username}</Text>
-            </div>
-          </div>
-          <Space direction="vertical" align="center" size="small">
-            <Avatar size={80} src={me?.profile?.avatarUrl} icon={<UserOutlined />} />
-            <Upload
-              showUploadList={false}
-              beforeUpload={(file) => {
-                handleUploadAvatar(file, me.id);
-                return false;
-              }}
-            >
-              <Button icon={<UploadOutlined />} loading={uploadAvatarState.loading}>
-                {me?.profile?.avatarUrl ? "Đổi avatar" : "Upload avatar"}
-              </Button>
-            </Upload>
-          </Space>
-        </div>
-        <Form
-          form={profileForm}
-          layout="vertical"
-          initialValues={{
-            email: me?.email,
-            firstName: me?.firstName,
-            lastName: me?.lastName,
-            phone: me?.profile?.phone,
-            address: me?.profile?.address,
+    <ConfigProvider
+      theme={{
+        algorithm: theme.darkAlgorithm,
+        token: { colorPrimary: "#22c55e", borderRadius: 12 },
+        components: {
+          Card: { colorBgContainer: "#0b1220" },
+          Table: {
+            headerBg: "#111827",
+            headerColor: "#ffffff",
+            rowHoverBg: "#111827",
+            bodyBg: "#0b1220",
+            colorText: "#ffffff",
+            borderColor: "rgba(255,255,255,0.08)",
+          },
+          Modal: { contentBg: "#0b1220", headerBg: "#111827", titleColor: "#ffffff" },
+          Form: { labelColor: "#94a3b8" },
+          Input: { colorBgContainer: "#111827", colorText: "#ffffff", colorBorder: "rgba(255,255,255,0.12)" },
+          Select: { colorBgContainer: "#111827", colorText: "#ffffff", colorBorder: "rgba(255,255,255,0.12)" },
+        },
+      }}
+    >
+      <div className="page-stack" style={{ padding: "24px", background: "#0b0f14", minHeight: "100vh", color: "#fff" }}>
+        {contextHolder}
+        <Card
+          style={{
+            background: "#0b1220",
+            borderRadius: 20,
+            border: "1px solid rgba(255,255,255,0.06)",
+            marginBottom: 16,
           }}
-          onFinish={submitProfile}
         >
-          <div className="form-grid">
-            <Form.Item name="firstName" label="Tên">
-              <Input />
-            </Form.Item>
-            <Form.Item name="lastName" label="Họ">
-              <Input />
-            </Form.Item>
-          </div>
-          <div className="form-grid">
-            <Form.Item name="email" label="Email" rules={[{ type: "email", message: "Email không hợp lệ" }]}>
-              <Input />
-            </Form.Item>
-            <Form.Item name="phone" label="Số điện thoại">
-              <Input />
-            </Form.Item>
-          </div>
-          <Form.Item name="address" label="Địa chỉ">
-            <Input />
-          </Form.Item>
-          <Button type="primary" htmlType="submit" loading={updateMeState.loading}>
-            Lưu hồ sơ
-          </Button>
-        </Form>
-      </section>
-
-      {me?.isStaff ? (
-        <section className="page-panel">
           <div className="section-head">
-            <div>
-              <Title level={3}>Quản lý tài khoản</Title>
-              <Text type="secondary">Tạo, cập nhật, khóa/mở khóa, phân quyền và xóa user.</Text>
+            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+              <div>
+                <Title level={3} style={{ margin: 0, color: "#fff" }}>Hồ sơ của tôi</Title>
+                <Text style={{ color: "#94a3b8" }}>{me?.username}</Text>
+              </div>
             </div>
-            <Space>
-              <Input.Search
-                allowClear
-                placeholder="Tìm username hoặc email"
-                onSearch={setSearch}
-                style={{ width: 260 }}
-              />
-              <Button icon={<ReloadOutlined />} onClick={() => usersQuery.refetch()}>
-                Tải lại
-              </Button>
-              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-                Thêm user
-              </Button>
+            <Space direction="vertical" align="center" size="small">
+              <Avatar size={80} src={me?.profile?.avatarUrl} icon={<UserOutlined />} />
+              <Upload
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  handleUploadAvatar(file, me.id);
+                  return false;
+                }}
+              >
+                <Button icon={<UploadOutlined />} loading={uploadAvatarState.loading}>
+                  {me?.profile?.avatarUrl ? "Đổi avatar" : "Upload avatar"}
+                </Button>
+              </Upload>
             </Space>
           </div>
-          {usersQuery.error && <Alert className="form-alert" type="error" showIcon message={usersQuery.error.message} />}
-          <Table rowKey="id" columns={columns} dataSource={users} loading={usersQuery.loading} scroll={{ x: 900 }} />
-        </section>
-      ) : (
-        null )}
-
-      <Modal
-        title={isCreateOpen ? "Thêm user" : `Cập nhật ${editingUser?.username || ""}`}
-        open={isCreateOpen || Boolean(editingUser)}
-        onCancel={closeModal}
-        footer={null}
-        destroyOnClose
-      >
-        <Form form={form} layout="vertical" onFinish={submitUser}>
-          {isCreateOpen && (
-            <>
-              <Form.Item name="username" label="Tên đăng nhập" rules={[{ required: true, message: "Nhập tên đăng nhập" }]}>
+          <Form
+            form={profileForm}
+            layout="vertical"
+            initialValues={{
+              email: me?.email,
+              firstName: me?.firstName,
+              lastName: me?.lastName,
+              phone: me?.profile?.phone,
+              address: me?.profile?.address,
+            }}
+            onFinish={submitProfile}
+          >
+            <div className="form-grid">
+              <Form.Item name="firstName" label={<Text style={{ color: "#fff" }}>Tên</Text>}>
                 <Input />
               </Form.Item>
-              <Form.Item name="password" label="Mật khẩu" rules={[{ required: true, min: 8, message: "Tối thiểu 8 ký tự" }]}>
-                <Input.Password />
+              <Form.Item name="lastName" label={<Text style={{ color: "#fff" }}>Họ</Text>}>
+                <Input />
               </Form.Item>
-            </>
-          )}
-          <Form.Item
-            name="email"
-            label="Email"
-            rules={[
-              { required: true, message: "Nhập email" },
-              { type: "email", message: "Email không hợp lệ" },
-            ]}
+            </div>
+            <div className="form-grid">
+              <Form.Item name="email" label={<Text style={{ color: "#fff" }}>Email</Text>} rules={[{ type: "email", message: "Email không hợp lệ" }]}>
+                <Input />
+              </Form.Item>
+              <Form.Item name="phone" label={<Text style={{ color: "#fff" }}>Số điện thoại</Text>}>
+                <Input />
+              </Form.Item>
+            </div>
+            <Form.Item name="address" label={<Text style={{ color: "#fff" }}>Địa chỉ</Text>}>
+              <Input />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" loading={updateMeState.loading} style={{ background: "#22c55e", borderColor: "#22c55e" }}>
+              Lưu hồ sơ
+            </Button>
+          </Form>
+        </Card>
+
+        {me?.isStaff ? (
+          <Card
+            style={{
+              background: "#0b1220",
+              borderRadius: 20,
+              border: "1px solid rgba(255,255,255,0.06)",
+            }}
           >
-            <Input />
-          </Form.Item>
-          <div className="form-grid">
-            <Form.Item name="firstName" label="Tên">
+            <div className="section-head">
+              <div>
+                <Title level={3} style={{ color: "#fff", margin: 0 }}>Quản lý tài khoản</Title>
+                <Text style={{ color: "#94a3b8" }}>Tạo, cập nhật, khóa/mở khóa, phân quyền và xóa user.</Text>
+              </div>
+              <Space>
+                <Input.Search
+                  allowClear
+                  placeholder="Tìm username hoặc email"
+                  onSearch={setSearch}
+                  style={{ width: 260 }}
+                />
+                <Button icon={<ReloadOutlined />} onClick={() => usersQuery.refetch()}>
+                  Tải lại
+                </Button>
+                <Button type="primary" icon={<PlusOutlined />} onClick={openCreate} style={{ background: "#22c55e", borderColor: "#22c55e" }}>
+                  Thêm user
+                </Button>
+              </Space>
+            </div>
+            {usersQuery.error && <Alert className="form-alert" type="error" showIcon message={usersQuery.error.message} />}
+            <Table rowKey="id" columns={columns} dataSource={users} loading={usersQuery.loading} scroll={{ x: 900 }} />
+          </Card>
+        ) : null}
+
+        <Modal
+          title={isCreateOpen ? "Thêm user" : `Cập nhật ${editingUser?.username || ""}`}
+          open={isCreateOpen || Boolean(editingUser)}
+          onCancel={closeModal}
+          footer={null}
+          destroyOnClose
+        >
+          <Form form={form} layout="vertical" onFinish={submitUser}>
+            {isCreateOpen && (
+              <>
+                <Form.Item name="username" label={<Text style={{ color: "#fff" }}>Tên đăng nhập</Text>} rules={[{ required: true, message: "Nhập tên đăng nhập" }]}>
+                  <Input />
+                </Form.Item>
+                <Form.Item name="password" label={<Text style={{ color: "#fff" }}>Mật khẩu</Text>} rules={[{ required: true, min: 8, message: "Tối thiểu 8 ký tự" }]}>
+                  <Input.Password />
+                </Form.Item>
+              </>
+            )}
+            <Form.Item
+              name="email"
+              label={<Text style={{ color: "#fff" }}>Email</Text>}
+              rules={[
+                { required: true, message: "Nhập email" },
+                { type: "email", message: "Email không hợp lệ" },
+              ]}
+            >
               <Input />
             </Form.Item>
-            <Form.Item name="lastName" label="Họ">
+            <div className="form-grid">
+              <Form.Item name="firstName" label={<Text style={{ color: "#fff" }}>Tên</Text>}>
+                <Input />
+              </Form.Item>
+              <Form.Item name="lastName" label={<Text style={{ color: "#fff" }}>Họ</Text>}>
+                <Input />
+              </Form.Item>
+            </div>
+            <Form.Item name="phone" label={<Text style={{ color: "#fff" }}>Số điện thoại</Text>}>
               <Input />
             </Form.Item>
-          </div>
-          <Form.Item name="phone" label="Số điện thoại">
-            <Input />
-          </Form.Item>
-          <Form.Item name="address" label="Địa chỉ">
-            <Input />
-          </Form.Item>
-          <div className="switch-grid">
-            <Form.Item name="isActive" label="Hoạt động" valuePropName="checked">
-              <Switch />
+            <Form.Item name="address" label={<Text style={{ color: "#fff" }}>Địa chỉ</Text>}>
+              <Input />
             </Form.Item>
-            <Form.Item name="isStaff" label="Staff" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-          </div>
-          <Button type="primary" htmlType="submit" loading={createState.loading || updateState.loading} block>
-            Lưu
-          </Button>
-        </Form>
-      </Modal>
-    </div>
+            <div className="switch-grid">
+              <Form.Item name="isActive" label={<Text style={{ color: "#fff" }}>Hoạt động</Text>} valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="isStaff" label={<Text style={{ color: "#fff" }}>Staff</Text>} valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </div>
+            <Button type="primary" htmlType="submit" loading={createState.loading || updateState.loading} block style={{ background: "#22c55e", borderColor: "#22c55e" }}>
+              Lưu
+            </Button>
+          </Form>
+        </Modal>
+      </div>
+    </ConfigProvider>
   );
 }
 

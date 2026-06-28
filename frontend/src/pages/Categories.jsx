@@ -147,20 +147,22 @@ export default function Categories() {
       sorter: (a, b) => a.name.localeCompare(b.name),
     },
     {
-      title: "Type",
-      dataIndex: "type",
-      key: "type",
-      filters: [
-        { text: "Income", value: "income" },
-        { text: "Expense", value: "expense" },
-      ],
-      onFilter: (value, record) => record.type === value,
-      render: (type) => (
-        <Tag color={type === "income" ? "green" : "red"}>
-          {type === "income" ? "Thu nhập" : "Chi tiêu"}
-        </Tag>
-      ),
-    },
+  title: "Type",
+  dataIndex: "type",
+  key: "type",
+  filters: [
+    { text: "Income", value: "INCOME" },
+    { text: "Expense", value: "EXPENSE" },
+  ],
+  onFilter: (value, record) => record.type === value,
+  render: (type) => (
+    <Tag color={type?.toUpperCase() === "INCOME" ? "green" : "red"}>
+      {type?.toUpperCase() === "INCOME"
+        ? "Thu nhập"
+        : "Chi tiêu"}
+    </Tag>
+  ),
+},
     
     {
       title: "Actions",

@@ -140,7 +140,24 @@ export default function Dashboard() {
   });
 
   const stats = computeStats(currentMonthTxns);
-  const savingsAmount = Math.max(stats.balance, 0);
+
+  // Calculate net savings dynamically from Tiết Kiệm transactions:
+  // Net savings = EXPENSE(Tiết Kiệm) - INCOME(Tiết Kiệm)
+  // Deposit into goal = expense → adds to savings
+  // Withdraw/close from goal = income → subtracts from savings
+  const savingsAmount = (() => {
+    const savingsCatNames = ["Tiết Kiệm", "Tiết kiệm", "tiết kiệm", "Savings", "savings"];
+    return currentMonthTxns
+      .filter((t) => {
+        const cat = t.categoryName || "";
+        return savingsCatNames.some((name) => cat.includes(name));
+      })
+      .reduce((net, t) => {
+        const amount = safeNum(t.amount);
+        return net + (isIncome(t.type) ? -amount : amount);
+      }, 0);
+  })();
+
   const expenseByCategory = buildExpenseByCategory(currentMonthTxns, mergedCategoryMap);
   const savingsPercentage = stats.income > 0 ? (stats.balance / stats.income) * 100 : 0;
 
@@ -149,7 +166,18 @@ export default function Dashboard() {
     const key = historyMonth.format("YYYY-MM");
     const txMonth = transactions.filter((t) => dayjs(t.date).format("YYYY-MM") === key);
     const { income, expense } = computeStats(txMonth);
-    return { key, month: historyMonth.format("MM/YYYY"), income, expense };
+    // Tính tiết kiệm: EXPENSE(Tiết Kiệm) - INCOME(Tiết Kiệm)
+    const savingsCatNames = ["Tiết Kiệm", "Tiết kiệm", "tiết kiệm", "Savings", "savings"];
+    const savings = txMonth
+      .filter((t) => {
+        const cat = t.categoryName || "";
+        return savingsCatNames.some((name) => cat.includes(name));
+      })
+      .reduce((net, t) => {
+        const amount = safeNum(t.amount);
+        return net + (isIncome(t.type) ? -amount : amount);
+      }, 0);
+    return { key, month: historyMonth.format("MM/YYYY"), income, expense, savings };
   })();
 
   // Alerts
@@ -253,7 +281,7 @@ export default function Dashboard() {
 },
   ];
 
-  // History columns (+balance)
+  // History columns (+balance + savings)
   const historyColumns = [
     { title: "Tháng", dataIndex: "month" },
     {
@@ -265,6 +293,19 @@ export default function Dashboard() {
       title: "Chi tiêu",
       dataIndex: "expense",
       render: (v) => <span style={{ color: "#ef4444", fontWeight: 600 }}>{formatCurrency(v)}</span>,
+    },
+    {
+      title: "Tiết kiệm",
+      dataIndex: "savings",
+      render: (v) => {
+        const val = safeNum(v);
+        return (
+          <span style={{ color: val >= 0 ? "#22c55e" : "#ef4444", fontWeight: 600 }}>
+            {val >= 0 ? "+" : ""}
+            {formatCurrency(val)}
+          </span>
+        );
+      },
     },
     {
       title: "Số dư",

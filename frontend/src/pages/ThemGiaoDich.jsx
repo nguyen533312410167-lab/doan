@@ -1,7 +1,9 @@
 import { Button, DatePicker, Form, Input, InputNumber, Select, Typography, message } from "antd";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@apollo/client";
 import { useNavigate } from "react-router-dom";
 import { CATEGORIES, CREATE_TRANSACTION } from "../graphql/transactions.js";
+import { useNotificationRefresh } from "../contexts/NotificationContext.jsx";
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -10,20 +12,26 @@ export default function AddTransactionPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const navigate = useNavigate();
   const [form] = Form.useForm();
+  const [selectedType, setSelectedType] = useState(null);
 
   const { data: catData } = useQuery(CATEGORIES);
   const categories = catData?.categories || [];
 
-  const allCategoryOptions = categories.map((c) => ({
-    value: c.id,
-    label: c.nameVi || c.name,
-    type: c.type,
-  }));
+  const categoryOptions = useMemo(() => {
+    if (!selectedType) return [];
+    return categories
+      .filter((c) => c.type === selectedType)
+      .map((c) => ({ value: c.id, label: c.nameVi || c.name }));
+  }, [categories, selectedType]);
+
+  const { refreshNotifications } = useNotificationRefresh();
 
   const [createTxn, { loading }] = useMutation(CREATE_TRANSACTION, {
     onCompleted: () => {
       messageApi.success("Đã thêm giao dịch thành công!");
       form.resetFields();
+      setSelectedType(null);
+      refreshNotifications();
     },
     onError: (err) => {
       messageApi.error(err.message || "Thêm giao dịch thất bại");
@@ -34,7 +42,7 @@ export default function AddTransactionPage() {
     try {
       await createTxn({
         variables: {
-          type: values.type,
+          transactionType: values.type,
           amount: String(values.amount),
           date: values.date.format("YYYY-MM-DD"),
           categoryId: values.categoryId || undefined,
@@ -48,7 +56,13 @@ export default function AddTransactionPage() {
 
   const onCancel = () => {
     form.resetFields();
+    setSelectedType(null);
     navigate("/transactions");
+  };
+
+  const handleTypeChange = (value) => {
+    setSelectedType(value);
+    form.setFieldsValue({ categoryId: undefined });
   };
 
   return (
@@ -98,6 +112,7 @@ export default function AddTransactionPage() {
           >
             <Select
               placeholder="Chọn loại giao dịch"
+              onChange={handleTypeChange}
               options={[
                 { value: "income", label: "Thu nhập" },
                 { value: "expense", label: "Chi tiêu" },
@@ -122,9 +137,9 @@ export default function AddTransactionPage() {
             name="categoryId"
           >
             <Select
-              placeholder="Chọn danh mục"
+              placeholder={selectedType ? "Chọn danh mục" : "Chọn loại giao dịch trước"}
               allowClear
-              options={allCategoryOptions}
+              options={categoryOptions}
             />
           </Form.Item>
 

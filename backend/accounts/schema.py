@@ -6,8 +6,19 @@ from django.db.models import Q, Sum
 from graphene_django import DjangoObjectType
 from graphene_file_upload.scalars import Upload
 from graphql import GraphQLError
+from decimal import Decimal
 
-from .models import Profile, Category, Transaction, SavingGoal
+from .models import Profile, Category, Transaction, SavingGoal, Notification, NotificationCampaign, CampaignRecipient
+from .services import (
+    notify_transaction_created,
+    notify_transaction_updated,
+    notify_transaction_deleted,
+    notify_goal_created,
+    notify_goal_deposit,
+    notify_goal_withdraw,
+    notify_check_goal_completion,
+    notify_new_income,
+)
 
 
 User = get_user_model()
@@ -107,10 +118,12 @@ class SavingGoalType(DjangoObjectType):
             "id", "user", "name", "target_amount", "current_amount",
             "due_date", "note", "is_completed", "created_at", "updated_at",
         )
-
     def resolve_progress_percent(self, info):
-        if self.target_amount > 0:
-            return float(self.current_amount) / float(self.target_amount) * 100
+        from decimal import Decimal
+        target = Decimal(str(self.target_amount))
+        current = Decimal(str(self.current_amount))
+        if target > Decimal("0"):
+            return float(current / target * 100)
         return 0
 
     def resolve_days_left(self, info):
@@ -119,7 +132,7 @@ class SavingGoalType(DjangoObjectType):
         return delta.days
 
 
-# ──── User Mutations (existing) ────
+# ──── User Mutations ────
 
 class Register(graphene.Mutation):
     class Arguments:
@@ -370,6 +383,12 @@ class CreateTransaction(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, transaction_type, amount, date, category_id=None, note=""):
         user = require_auth(info)
+        txn_amount = float(amount)
+
+        # Validate balance for expense transactions
+        if transaction_type == 'expense':
+            check_expense_balance(user, txn_amount)
+
         category = None
         if category_id:
             try:
@@ -383,6 +402,12 @@ class CreateTransaction(graphene.Mutation):
             category=category, note=note, date=parsed_date,
             **{'type': transaction_type},
         )
+
+        # Auto-generate notifications
+        notify_transaction_created(user, txn)
+        if transaction_type == 'income':
+            notify_new_income(user, txn)
+
         return CreateTransaction(transaction=txn)
 
 
@@ -405,6 +430,14 @@ class UpdateTransaction(graphene.Mutation):
         except Transaction.DoesNotExist as exc:
             raise GraphQLError("Transaction not found.") from exc
 
+        # Determine new type and amount for balance validation
+        new_type = kwargs.get("transaction_type", txn.type)
+        new_amount = float(kwargs.get("amount", txn.amount))
+
+        # Check balance if this is/will be an expense transaction
+        if new_type == 'expense':
+            check_expense_balance(user, new_amount, exclude_txn_id=id)
+
         if "transaction_type" in kwargs and kwargs["transaction_type"] is not None:
             txn.type = kwargs["transaction_type"]
         if "amount" in kwargs and kwargs["amount"] is not None:
@@ -420,6 +453,10 @@ class UpdateTransaction(graphene.Mutation):
             from datetime import datetime
             txn.date = datetime.strptime(kwargs["date"], "%Y-%m-%d").date()
         txn.save()
+
+        # Auto-generate notification after update
+        notify_transaction_updated(user, txn)
+
         return UpdateTransaction(transaction=txn)
 
 
@@ -432,8 +469,80 @@ class DeleteTransaction(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, id):
         user = require_auth(info)
-        deleted, _ = Transaction.objects.filter(pk=id, user=user).delete()
-        return DeleteTransaction(ok=deleted > 0)
+        try:
+            txn = Transaction.objects.get(pk=id, user=user)
+        except Transaction.DoesNotExist as exc:
+            raise GraphQLError("Transaction not found.") from exc
+
+        # Capture details before deletion for notification
+        txn_type = txn.type
+        txn_amount = float(txn.amount)
+
+        txn.delete()
+        notify_transaction_deleted(user, txn_type, txn_amount)
+        return DeleteTransaction(ok=True)
+
+
+# ──── Helper: get-or-create Tiết Kiệm category ────
+
+def get_savings_category():
+    """Find or auto-create the Tiết Kiệm expense category."""
+    cat = Category.objects.filter(
+        name_vi__iexact="tiết kiệm",
+        type="expense"
+    ).first()
+    if not cat:
+        cat = Category.objects.filter(
+            name__iexact="savings",
+            type="expense"
+        ).first()
+    if not cat:
+        cat = Category.objects.create(
+            name="Savings",
+            name_vi="Tiết Kiệm",
+            type="expense",
+            sort_order=999,
+        )
+    return cat
+
+
+# ──── Helper: calculate user balance from transactions ────
+
+def get_user_balance(user):
+    """Calculate current balance = total income - total expense from all transactions."""
+    from django.db.models import Sum
+    income_sum = Transaction.objects.filter(user=user, type='income').aggregate(s=Sum('amount'))['s'] or 0
+    expense_sum = Transaction.objects.filter(user=user, type='expense').aggregate(s=Sum('amount'))['s'] or 0
+    return float(income_sum) - float(expense_sum)
+
+
+def check_expense_balance(user, expense_amount, exclude_txn_id=None):
+    """
+    Validate that user has enough balance for an expense transaction.
+    If exclude_txn_id is provided, exclude that transaction from balance calc (for updates).
+    Raises GraphQLError if balance would go negative.
+    """
+    if float(expense_amount) <= 0:
+        return  # Skip check for zero/negative amounts (handled elsewhere)
+
+    balance = get_user_balance(user)
+
+    # If updating, exclude the old transaction amount from balance
+    if exclude_txn_id:
+        try:
+            old_txn = Transaction.objects.get(pk=exclude_txn_id, user=user)
+            if old_txn.type == 'expense':
+                balance += float(old_txn.amount)
+        except Transaction.DoesNotExist:
+            pass
+
+    if float(balance) < float(expense_amount):
+        formatted_balance = f"{balance:,.0f}₫"
+        raise GraphQLError(
+            f"Số dư hiện tại không đủ để thực hiện giao dịch này. "
+            f"Số dư: {formatted_balance}. "
+            f"Vui lòng giảm số tiền hoặc thêm thu nhập."
+        )
 
 
 # ──── Saving Goal Mutations ────
@@ -453,9 +562,14 @@ class CreateSavingGoal(graphene.Mutation):
         from datetime import datetime
         parsed_date = datetime.strptime(due_date, "%Y-%m-%d").date()
         goal = SavingGoal.objects.create(
-            user=user, name=name, target_amount=target_amount,
+            user=user, name=name,
+            target_amount=Decimal(target_amount),
             due_date=parsed_date, note=note,
         )
+
+        # Auto-generate notification
+        notify_goal_created(user, goal)
+
         return CreateSavingGoal(saving_goal=goal)
 
 
@@ -479,9 +593,14 @@ class UpdateSavingGoal(graphene.Mutation):
         except SavingGoal.DoesNotExist as exc:
             raise GraphQLError("Saving goal not found.") from exc
 
-        for field in ("name", "target_amount", "current_amount", "note", "is_completed"):
+        for field in ("name", "note", "is_completed"):
             if field in kwargs and kwargs[field] is not None:
                 setattr(goal, field, kwargs[field])
+
+        # Chuyển string → Decimal cho trường số để tránh lỗi type comparison
+        for field in ("target_amount", "current_amount"):
+            if field in kwargs and kwargs[field] is not None:
+                setattr(goal, field, Decimal(kwargs[field]))
         if "due_date" in kwargs and kwargs["due_date"] is not None:
             from datetime import datetime
             goal.due_date = datetime.strptime(kwargs["due_date"], "%Y-%m-%d").date()
@@ -490,6 +609,224 @@ class UpdateSavingGoal(graphene.Mutation):
 
 
 class DeleteSavingGoal(graphene.Mutation):
+    """
+    Delete a saving goal.
+    If the goal still has money (current_amount > 0), it will first perform
+    a close-out (transfer remaining balance to income) before deleting.
+    """
+    class Arguments:
+        id = graphene.ID(required=True)
+
+    ok = graphene.Boolean()
+    transaction = graphene.Field(TransactionType)
+
+    @classmethod
+    def mutate(cls, root, info, id):
+        from datetime import date
+
+        user = require_auth(info)
+        try:
+            goal = SavingGoal.objects.get(pk=id, user=user)
+        except SavingGoal.DoesNotExist as exc:
+            raise GraphQLError("Không tìm thấy mục tiêu tiết kiệm.") from exc
+
+        remaining = float(goal.current_amount)
+        txn = None
+
+        # If there's remaining money, auto-close it first
+        if remaining > 0:
+            savings_category = get_savings_category()
+            txn = Transaction.objects.create(
+                user=user,
+                category=savings_category,
+                amount=remaining,
+                note=f"Tất toán mục tiêu tiết kiệm {goal.name}",
+                date=date.today(),
+                **{'type': 'income'},
+            )
+
+        goal.delete()
+        return DeleteSavingGoal(ok=True, transaction=txn)
+
+
+class DepositToGoal(graphene.Mutation):
+    """
+    Deposit money into a saving goal.
+    Updates current_amount, auto-completes if target reached,
+    and creates an expense Transaction with Tiết Kiệm category.
+    """
+    class Arguments:
+        goal_id = graphene.ID(required=True)
+        amount = graphene.String(required=True)
+
+    saving_goal = graphene.Field(SavingGoalType)
+    transaction = graphene.Field(TransactionType)
+
+    @classmethod
+    def mutate(cls, root, info, goal_id, amount):
+        from datetime import date
+        from django.db import transaction as db_transaction
+
+        user = require_auth(info)
+        deposit_amount = Decimal(amount)
+
+        if deposit_amount <= 0:
+            raise GraphQLError("Số tiền nạp phải lớn hơn 0.")
+
+        # Validate balance: depositing into goal is an expense
+        check_expense_balance(user, deposit_amount)
+
+        # Use row-level locking + atomic transaction to prevent double-deposit
+        # race conditions when the user clicks the button multiple times.
+        with db_transaction.atomic():
+            try:
+                goal = SavingGoal.objects.select_for_update().get(pk=goal_id, user=user)
+            except SavingGoal.DoesNotExist as exc:
+                raise GraphQLError("Không tìm thấy mục tiêu tiết kiệm.") from exc
+
+            if goal.is_completed:
+                raise GraphQLError("Mục tiêu này đã hoàn thành.")
+
+            goal.current_amount += deposit_amount
+
+            if goal.current_amount >= goal.target_amount:
+                goal.is_completed = True
+                goal.current_amount = goal.target_amount
+
+            goal.save()
+
+            savings_category = get_savings_category()
+
+            txn = Transaction.objects.create(
+                user=user,
+                category=savings_category,
+                amount=deposit_amount,
+                note=f"Nạp tiền vào mục tiêu {goal.name}",
+                date=date.today(),
+                **{'type': 'expense'},
+            )
+
+        # Auto-generate notifications
+        was_completed = notify_check_goal_completion(user, goal)
+        if not was_completed:
+            notify_goal_deposit(user, goal, float(deposit_amount))
+
+        return DepositToGoal(saving_goal=goal, transaction=txn)
+
+
+class WithdrawFromGoal(graphene.Mutation):
+    """
+    Withdraw money from a saving goal.
+    Decreases current_amount and creates an INCOME Transaction
+    with Tiết Kiệm category so it reduces net savings in reports.
+    """
+    class Arguments:
+        goal_id = graphene.ID(required=True)
+        amount = graphene.String(required=True)
+        date = graphene.String()
+        note = graphene.String()
+
+    saving_goal = graphene.Field(SavingGoalType)
+    transaction = graphene.Field(TransactionType)
+
+    @classmethod
+    def mutate(cls, root, info, goal_id, amount, date=None, note=""):
+        from datetime import date as date_func
+
+        user = require_auth(info)
+        withdraw_amount = float(amount)
+
+        if withdraw_amount <= 0:
+            raise GraphQLError("Số tiền rút phải lớn hơn 0.")
+
+        try:
+            goal = SavingGoal.objects.get(pk=goal_id, user=user)
+        except SavingGoal.DoesNotExist as exc:
+            raise GraphQLError("Không tìm thấy mục tiêu tiết kiệm.") from exc
+
+        if float(goal.current_amount) < withdraw_amount:
+            raise GraphQLError(
+                f"Số dư hiện tại chỉ có {float(goal.current_amount):,.0f}₫. "
+                f"Không thể rút {withdraw_amount:,.0f}₫."
+            )
+
+        goal.current_amount = float(goal.current_amount) - withdraw_amount
+        goal.save()
+
+        savings_category = get_savings_category()
+
+        txn_date = date_func.today()
+        if date:
+            from datetime import datetime
+            txn_date = datetime.strptime(date, "%Y-%m-%d").date()
+
+        txn_note = note or f"Rút tiền từ mục tiêu tiết kiệm {goal.name}"
+
+        txn = Transaction.objects.create(
+            user=user,
+            category=savings_category,
+            amount=withdraw_amount,
+            note=txn_note,
+            date=txn_date,
+            **{'type': 'income'},
+        )
+
+        # Auto-generate notification
+        notify_goal_withdraw(user, goal, withdraw_amount)
+
+        return WithdrawFromGoal(saving_goal=goal, transaction=txn)
+
+
+# ──── Notification ────
+
+class NotificationType(DjangoObjectType):
+    class Meta:
+        model = Notification
+        fields = (
+            "id", "user", "title", "message", "type",
+            "category", "sender", "is_read", "link", "created_at",
+        )
+
+
+class NotificationFilterInput(graphene.InputObjectType):
+    type = graphene.String()
+    category = graphene.String()
+    is_read = graphene.Boolean()
+    search = graphene.String()
+
+
+# ──── Notification Mutations ────
+
+class MarkNotificationRead(graphene.Mutation):
+    class Arguments:
+        id = graphene.ID(required=True)
+
+    ok = graphene.Boolean()
+    notification = graphene.Field(NotificationType)
+
+    @classmethod
+    def mutate(cls, root, info, id):
+        user = require_auth(info)
+        try:
+            note = Notification.objects.get(pk=id, user=user)
+            note.is_read = True
+            note.save()
+            return MarkNotificationRead(ok=True, notification=note)
+        except Notification.DoesNotExist:
+            raise GraphQLError("Notification not found.")
+
+
+class MarkAllNotificationsRead(graphene.Mutation):
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info):
+        user = require_auth(info)
+        updated = Notification.objects.filter(user=user, is_read=False).update(is_read=True)
+        return MarkAllNotificationsRead(ok=True)
+
+
+class DeleteNotification(graphene.Mutation):
     class Arguments:
         id = graphene.ID(required=True)
 
@@ -498,8 +835,248 @@ class DeleteSavingGoal(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, id):
         user = require_auth(info)
-        deleted, _ = SavingGoal.objects.filter(pk=id, user=user).delete()
-        return DeleteSavingGoal(ok=deleted > 0)
+        deleted, _ = Notification.objects.filter(pk=id, user=user).delete()
+        return DeleteNotification(ok=deleted > 0)
+
+
+class DeleteAllNotifications(graphene.Mutation):
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info):
+        user = require_auth(info)
+        Notification.objects.filter(user=user).delete()
+        return DeleteAllNotifications(ok=True)
+
+
+class CreateAdminNotification(graphene.Mutation):
+    class Arguments:
+        title = graphene.String(required=True)
+        message = graphene.String(required=True)
+        category = graphene.String(default_value="info")
+        link = graphene.String()
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, title, message, category="info", link=""):
+        sender = require_staff(info)
+        # Send to all users
+        for user in User.objects.filter(is_active=True):
+            Notification.objects.create(
+                user=user,
+                title=title,
+                message=message,
+                type="admin",
+                category=category,
+                sender=sender.username if hasattr(sender, 'username') else "Admin",
+                link=link or "",
+            )
+        return CreateAdminNotification(ok=True)
+
+
+# ──── Admin Notification Campaign ────
+
+class CampaignRecipientType(DjangoObjectType):
+    class Meta:
+        model = CampaignRecipient
+        fields = ("id", "user")
+
+    user = graphene.Field(UserType)
+
+    def resolve_user(self, info):
+        return self.user
+
+
+class NotificationCampaignType(DjangoObjectType):
+    created_by = graphene.Field(UserType)
+    recipient_count = graphene.Int()
+    target_display = graphene.String()
+
+    class Meta:
+        model = NotificationCampaign
+        fields = (
+            "id", "title", "message", "category", "target_type",
+            "link", "status", "created_at", "updated_at",
+        )
+
+    def resolve_created_by(self, info):
+        return self.created_by
+
+    def resolve_recipient_count(self, info):
+        if self.target_type == "ALL":
+            return User.objects.filter(is_active=True).count()
+        return self.recipients.count()
+
+    def resolve_target_display(self, info):
+        if self.target_type == "ALL":
+            return "Tất cả User"
+        count = self.recipients.count()
+        return f"{count} User cụ thể"
+
+
+# ──── Admin Campaign Mutations ────
+
+class CreateAdminNotificationCampaign(graphene.Mutation):
+    """Create campaign as draft or send immediately."""
+    class Arguments:
+        title = graphene.String(required=True)
+        message = graphene.String(required=True)
+        category = graphene.String(default_value="info")
+        link = graphene.String()
+        target_type = graphene.String(default_value="ALL")
+        user_ids = graphene.List(graphene.ID)
+        save_as_draft = graphene.Boolean(default_value=False)
+
+    campaign = graphene.Field(NotificationCampaignType)
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, title, message, category="info", link="", target_type="ALL", user_ids=None, save_as_draft=False):
+        sender = require_staff(info)
+
+        if not title or not title.strip():
+            raise GraphQLError("Title is required.")
+        if not message or not message.strip():
+            raise GraphQLError("Message is required.")
+        if target_type == "SELECTED" and (not user_ids or len(user_ids) == 0):
+            raise GraphQLError("Please select at least one user.")
+
+        status = "draft" if save_as_draft else "sent"
+
+        campaign = NotificationCampaign.objects.create(
+            title=title.strip(),
+            message=message.strip(),
+            category=category,
+            link=link or "",
+            target_type=target_type,
+            status=status,
+            created_by=sender,
+        )
+
+        # Save recipients if SELECTED
+        recipients = []
+        if target_type == "SELECTED" and user_ids:
+            for uid in user_ids:
+                try:
+                    user = User.objects.get(pk=uid)
+                    CampaignRecipient.objects.create(campaign=campaign, user=user)
+                    recipients.append(user)
+                except User.DoesNotExist:
+                    pass
+
+        # If sending immediately, create notifications
+        if not save_as_draft:
+            _send_campaign_notifications(campaign, sender, recipients if target_type == "SELECTED" else None)
+
+        return CreateAdminNotificationCampaign(campaign=campaign, ok=True)
+
+
+class SaveNotificationDraft(graphene.Mutation):
+    """Save or update a campaign as draft."""
+    class Arguments:
+        title = graphene.String(required=True)
+        message = graphene.String(required=True)
+        category = graphene.String(default_value="info")
+        link = graphene.String()
+        target_type = graphene.String(default_value="ALL")
+        user_ids = graphene.List(graphene.ID)
+
+    campaign = graphene.Field(NotificationCampaignType)
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, title, message, category="info", link="", target_type="ALL", user_ids=None):
+        sender = require_staff(info)
+
+        if not title or not title.strip():
+            raise GraphQLError("Title is required.")
+        if not message or not message.strip():
+            raise GraphQLError("Message is required.")
+
+        campaign = NotificationCampaign.objects.create(
+            title=title.strip(),
+            message=message.strip(),
+            category=category,
+            link=link or "",
+            target_type=target_type,
+            status="draft",
+            created_by=sender,
+        )
+
+        if target_type == "SELECTED" and user_ids:
+            for uid in user_ids:
+                try:
+                    user = User.objects.get(pk=uid)
+                    CampaignRecipient.objects.create(campaign=campaign, user=user)
+                except User.DoesNotExist:
+                    pass
+
+        return SaveNotificationDraft(campaign=campaign, ok=True)
+
+
+class DeleteNotificationCampaign(graphene.Mutation):
+    class Arguments:
+        id = graphene.ID(required=True)
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, id):
+        require_staff(info)
+        deleted, _ = NotificationCampaign.objects.filter(pk=id).delete()
+        return DeleteNotificationCampaign(ok=deleted > 0)
+
+
+class ResendNotificationCampaign(graphene.Mutation):
+    """
+    Resend a campaign that was already sent (or sent from draft).
+    Creates new notifications for all target users again.
+    """
+    class Arguments:
+        id = graphene.ID(required=True)
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, id):
+        sender = require_staff(info)
+        try:
+            campaign = NotificationCampaign.objects.get(pk=id)
+        except NotificationCampaign.DoesNotExist:
+            raise GraphQLError("Campaign not found.")
+
+        recipients = None
+        if campaign.target_type == "SELECTED":
+            recipients = [cr.user for cr in campaign.recipients.select_related("user")]
+
+        _send_campaign_notifications(campaign, sender, recipients)
+
+        campaign.status = "sent"
+        campaign.save()
+
+        return ResendNotificationCampaign(ok=True)
+
+
+def _send_campaign_notifications(campaign, sender, recipients=None):
+    """Helper to create Notification records for a campaign."""
+    if recipients is not None:
+        user_list = recipients
+    else:
+        user_list = User.objects.filter(is_active=True)
+
+    username = sender.username if hasattr(sender, 'username') and sender.username else "Admin"
+
+    for user in user_list:
+        Notification.objects.create(
+            user=user,
+            title=campaign.title,
+            message=campaign.message,
+            type="admin",
+            category=campaign.category,
+            sender=username,
+            link=campaign.link or "",
+        )
 
 
 # ──── Query ────
@@ -527,11 +1104,40 @@ class Query(graphene.ObjectType):
     saving_goals = graphene.List(SavingGoalType)
     saving_goal = graphene.Field(SavingGoalType, id=graphene.ID(required=True))
 
-    # Stats
     monthly_stats = graphene.List(
         graphene.JSONString,
         year=graphene.Int(required=True),
     )
+
+    # ── NEW: monthly savings calculated dynamically from transactions ──
+    monthly_savings = graphene.List(
+        graphene.JSONString,
+        year=graphene.Int(required=True),
+    )
+
+    # ── Admin Notifications ──
+    admin_notification_campaigns = graphene.List(
+        NotificationCampaignType,
+        status=graphene.String(),
+        limit=graphene.Int(),
+        offset=graphene.Int(),
+    )
+    users_for_notification = graphene.List(
+        UserType,
+        search=graphene.String(),
+    )
+
+    # ── Notifications ──
+    notifications = graphene.List(
+        NotificationType,
+        type=graphene.String(),
+        category=graphene.String(),
+        is_read=graphene.Boolean(),
+        search=graphene.String(),
+        limit=graphene.Int(),
+        offset=graphene.Int(),
+    )
+    unread_notification_count = graphene.Int()
 
     def resolve_me(self, info):
         user = require_auth(info)
@@ -620,11 +1226,90 @@ class Query(graphene.ObjectType):
             result[m][s["type"]] = float(s["total"])
         return [result[k] for k in sorted(result)]
 
+    def resolve_notifications(self, info, type=None, category=None, is_read=None, search=None, limit=None, offset=None):
+        user = require_auth(info)
+        qs = Notification.objects.filter(user=user)
+        if type:
+            qs = qs.filter(type=type)
+        if category:
+            qs = qs.filter(category=category)
+        if is_read is not None:
+            qs = qs.filter(is_read=is_read)
+        if search:
+            qs = qs.filter(Q(title__icontains=search) | Q(message__icontains=search))
+        qs = qs.order_by("-created_at")
+        if offset:
+            qs = qs[offset:]
+        if limit:
+            qs = qs[:limit]
+        return qs
+
+    def resolve_admin_notification_campaigns(self, info, status=None, limit=None, offset=None):
+        require_staff(info)
+        qs = NotificationCampaign.objects.select_related("created_by").order_by("-created_at")
+        if status:
+            qs = qs.filter(status=status)
+        if offset:
+            qs = qs[offset:]
+        if limit:
+            qs = qs[:limit]
+        return qs
+
+    def resolve_users_for_notification(self, info, search=None):
+        require_staff(info)
+        qs = User.objects.filter(is_active=True).order_by("username")
+        if search:
+            qs = qs.filter(
+                Q(username__icontains=search) |
+                Q(email__icontains=search) |
+                Q(first_name__icontains=search) |
+                Q(last_name__icontains=search)
+            )
+        return qs[:20]  # Limit to 20 results for performance
+
+    def resolve_unread_notification_count(self, info):
+        user = require_auth(info)
+        return Notification.objects.filter(user=user, is_read=False).count()
+
+    def resolve_monthly_savings(self, info, year):
+        """
+        Calculate net savings per month using transaction data only.
+        Net savings = EXPENSE(Tiết Kiệm) - INCOME(Tiết Kiệm)
+        Both deposit (expense) and withdraw/close (income) use Tiết Kiệm category.
+        """
+        from django.db.models.functions import ExtractMonth
+
+        user = require_auth(info)
+        savings_cat = get_savings_category()
+
+        savings_txns = Transaction.objects.filter(
+            user=user,
+            date__year=year,
+            category=savings_cat,
+        )
+
+        monthly = {}
+        for txn in savings_txns:
+            m = txn.date.month
+            if m not in monthly:
+                monthly[m] = {"month": m, "savings": 0.0, "deposit": 0.0, "withdraw": 0.0}
+            amount = float(txn.amount)
+
+            if txn.type == 'expense':
+                # Deposit into savings goal = adds to savings
+                monthly[m]["savings"] += amount
+                monthly[m]["deposit"] += amount
+            else:
+                # Withdraw or close from savings goal = reduces savings
+                monthly[m]["savings"] -= amount
+                monthly[m]["withdraw"] += amount
+
+        return [monthly[k] for k in sorted(monthly)]
+
 
 # ──── Mutation ────
 
 class Mutation(graphene.ObjectType):
-    # User mutations
     register = Register.Field()
     create_user = CreateUser.Field()
     update_user = UpdateUser.Field()
@@ -632,17 +1317,29 @@ class Mutation(graphene.ObjectType):
     upload_avatar = UploadAvatar.Field()
     delete_user = DeleteUser.Field()
 
-    # Category mutations
     create_category = CreateCategory.Field()
     update_category = UpdateCategory.Field()
     delete_category = DeleteCategory.Field()
 
-    # Transaction mutations
     create_transaction = CreateTransaction.Field()
     update_transaction = UpdateTransaction.Field()
     delete_transaction = DeleteTransaction.Field()
 
-    # Saving goal mutations
     create_saving_goal = CreateSavingGoal.Field()
     update_saving_goal = UpdateSavingGoal.Field()
     delete_saving_goal = DeleteSavingGoal.Field()
+    deposit_to_goal = DepositToGoal.Field()
+    withdraw_from_goal = WithdrawFromGoal.Field()
+
+    # Notification mutations
+    mark_notification_read = MarkNotificationRead.Field()
+    mark_all_notifications_read = MarkAllNotificationsRead.Field()
+    delete_notification = DeleteNotification.Field()
+    delete_all_notifications = DeleteAllNotifications.Field()
+    create_admin_notification = CreateAdminNotification.Field()
+
+    # Admin campaign mutations
+    create_admin_notification_campaign = CreateAdminNotificationCampaign.Field()
+    save_notification_draft = SaveNotificationDraft.Field()
+    delete_notification_campaign = DeleteNotificationCampaign.Field()
+    resend_notification_campaign = ResendNotificationCampaign.Field()

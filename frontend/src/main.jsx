@@ -7,6 +7,7 @@ import { BrowserRouter } from "react-router-dom";
 
 import App from "./App.jsx";
 import { client } from "./lib/apollo.js";
+import { NotificationProvider } from "./contexts/NotificationContext.jsx";
 import "./styles.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
@@ -14,7 +15,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <ConfigProvider locale={viVN}>
       <ApolloProvider client={client}>
         <BrowserRouter>
-          <App />
+          <NotificationProvider>
+            <App />
+          </NotificationProvider>
         </BrowserRouter>
       </ApolloProvider>
     </ConfigProvider>

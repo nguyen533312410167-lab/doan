@@ -8,12 +8,14 @@ import {
   BankOutlined,
   UserOutlined,
   AppstoreOutlined,
+  BellOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@apollo/client";
 import { useState } from "react";
 import { clearToken, isAuthenticated } from "../lib/auth.js";
 import { ME_QUERY } from "../graphql/account.js";
+import NotificationBell from "../components/NotificationBell.jsx";
 import "../styles/layout.css";
 
 const { Header, Sider, Content } = Layout;
@@ -72,6 +74,15 @@ export default function LayoutMaster({ children }) {
             label: "Danh mục",
             onClick: () => {
               navigate("/categories");
+              setDrawerOpen(false);
+            },
+          },
+          {
+            key: "/admin-notifications",
+            icon: <BellOutlined />,
+            label: "Thông báo",
+            onClick: () => {
+              navigate("/admin-notifications");
               setDrawerOpen(false);
             },
           },
@@ -259,21 +270,7 @@ export default function LayoutMaster({ children }) {
     style={{ display: "flex", alignItems: "center", gap: 14 }}
   >
     {/* Notification */}
-    <div
-      style={{
-        width: 36,
-        height: 36,
-        borderRadius: "50%",
-        background: "rgba(34,197,94,0.1)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        border: "1px solid rgba(34,197,94,0.25)",
-        cursor: "pointer",
-      }}
-    >
-      🔔
-    </div>
+    <NotificationBell />
 
     {/* Date */}
     <div
