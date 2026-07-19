@@ -54,19 +54,32 @@ const computeStats = (txs) => {
     .reduce((s, t) => s + safeNum(t.amount), 0);
 
   const expense = txs
-    .filter((t) => !isIncome(t.type))
+    .filter((t) => t.type === "expense" || t.type === "EXPENSE")
     .reduce((s, t) => s + safeNum(t.amount), 0);
+
+  // Net saving = sum of deposits - sum of withdrawals - sum of close
+  const netSaving = txs
+    .filter((t) => t.type === "saving" || t.type === "SAVING")
+    .reduce((net, t) => {
+      const amount = safeNum(t.amount);
+      const action = (t.action || "").toLowerCase();
+      if (action === "deposit") return net + amount;
+      if (action === "withdraw") return net - amount;
+      if (action === "close") return net - amount;
+      return net + amount;
+    }, 0);
 
   return {
     income,
     expense,
-    balance: income - expense,
+    saving: netSaving,
+    balance: income - expense - netSaving,
   };
 };
 
 const buildExpenseByCategory = (txs, mergedCategoryMap) => {
   const map = {};
-  txs.filter((t) => !isIncome(t.type)).forEach((t) => {
+  txs.filter((t) => t.type === "expense" || t.type === "EXPENSE").forEach((t) => {
     const catName = t.categoryName || mergedCategoryMap[t.category?.name] || "Khác";
     map[catName] = (map[catName] || 0) + safeNum(t.amount);
   });
@@ -116,7 +129,7 @@ export default function Dashboard() {
     try {
       setLoading(true);
       const result = await graphqlRequest(
-        `query T($year: Int!) { transactions(year: $year) { id type amount date categoryName } }`,
+        `query T($year: Int!) { transactions(year: $year) { id type action amount date categoryName } }`,
         { year: currentYear }
       );
       if (result.data?.transactions) {
@@ -141,41 +154,25 @@ export default function Dashboard() {
 
   const stats = computeStats(currentMonthTxns);
 
-  // Calculate net savings dynamically from Tiết Kiệm transactions:
-  // Net savings = EXPENSE(Tiết Kiệm) - INCOME(Tiết Kiệm)
-  // Deposit into goal = expense → adds to savings
-  // Withdraw/close from goal = income → subtracts from savings
-  const savingsAmount = (() => {
-    const savingsCatNames = ["Tiết Kiệm", "Tiết kiệm", "tiết kiệm", "Savings", "savings"];
-    return currentMonthTxns
-      .filter((t) => {
-        const cat = t.categoryName || "";
-        return savingsCatNames.some((name) => cat.includes(name));
-      })
-      .reduce((net, t) => {
-        const amount = safeNum(t.amount);
-        return net + (isIncome(t.type) ? -amount : amount);
-      }, 0);
-  })();
-
   const expenseByCategory = buildExpenseByCategory(currentMonthTxns, mergedCategoryMap);
   const savingsPercentage = stats.income > 0 ? (stats.balance / stats.income) * 100 : 0;
+  const savingsAmount = stats.saving;
 
   // History-month bar-chart data
   const singleMonthData = (() => {
     const key = historyMonth.format("YYYY-MM");
     const txMonth = transactions.filter((t) => dayjs(t.date).format("YYYY-MM") === key);
     const { income, expense } = computeStats(txMonth);
-    // Tính tiết kiệm: EXPENSE(Tiết Kiệm) - INCOME(Tiết Kiệm)
-    const savingsCatNames = ["Tiết Kiệm", "Tiết kiệm", "tiết kiệm", "Savings", "savings"];
+    // Tính tiết kiệm: dùng action (deposit = +, withdraw = -, close = -)
     const savings = txMonth
-      .filter((t) => {
-        const cat = t.categoryName || "";
-        return savingsCatNames.some((name) => cat.includes(name));
-      })
+      .filter((t) => (t.type || "").toLowerCase() === "saving")
       .reduce((net, t) => {
         const amount = safeNum(t.amount);
-        return net + (isIncome(t.type) ? -amount : amount);
+        const action = (t.action || "").toLowerCase();
+        if (action === "deposit") return net + amount;
+        if (action === "withdraw") return net - amount;
+        if (action === "close") return net - amount;
+        return net + amount;
       }, 0);
     return { key, month: historyMonth.format("MM/YYYY"), income, expense, savings };
   })();
@@ -256,29 +253,32 @@ export default function Dashboard() {
     {
       title: "Loại",
       key: "type",
-      render: (_, record) => (isIncome(record.type) ? "Thu nhập" : "Chi tiêu"),
+      render: (_, record) => {
+        const t = (record.type || "").toLowerCase();
+        if (t === "income") return "Thu nhập";
+        if (t === "expense") return "Chi tiêu";
+        if (t === "saving") return "Tiết kiệm";
+        return record.type;
+      },
     },
     {
       title: "Số tiền",
       dataIndex: "amount",
       key: "amount",
       render: (amount, record) => {
-    const value = safeNum(amount);
-
-    return (
-      <span
-        style={{
-          color: isIncome(record.type) ? "#22c55e" : "#ef4444",
-          fontWeight: 700,
-          fontSize: 15,
-        }}
-      >
-        {isIncome(record.type) ? "+" : "-"}
-        {formatCurrency(value)}
-      </span>
-    );
-  },
-},
+        const value = safeNum(amount);
+        const t = (record.type || "").toLowerCase();
+        let color = "#ef4444";
+        let prefix = "-";
+        if (t === "income") { color = "#22c55e"; prefix = "+"; }
+        else if (t === "saving") { color = "#1890ff"; prefix = ""; }
+        return (
+          <span style={{ color, fontWeight: 700, fontSize: 15 }}>
+            {prefix}{formatCurrency(value)}
+          </span>
+        );
+      },
+    },
   ];
 
   // History columns (+balance + savings)
@@ -311,7 +311,7 @@ export default function Dashboard() {
       title: "Số dư",
       key: "balance",
       render: (_, row) => {
-        const bal = safeNum(row.income) - safeNum(row.expense);
+        const bal = safeNum(row.income) - safeNum(row.expense) - safeNum(row.savings);
         return (
           <span style={{ color: bal >= 0 ? "#22c55e" : "#ef4444", fontWeight: 700 }}>
             {bal >= 0 ? "+" : ""}

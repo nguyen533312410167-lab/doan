@@ -92,17 +92,29 @@ class CategoryType(DjangoObjectType):
 
 class TransactionType(DjangoObjectType):
     category_name = graphene.String()
+    action_display = graphene.String()
+    saving_goal_name = graphene.String()
 
     class Meta:
         model = Transaction
         fields = (
-            "id", "user", "category", "type", "amount",
+            "id", "user", "category", "saving_goal", "type", "action", "amount",
             "note", "date", "created_at", "updated_at",
         )
 
     def resolve_category_name(self, info):
         if self.category:
             return self.category.name_vi or self.category.name
+        return None
+
+    def resolve_action_display(self, info):
+        if self.action and self.action != "none":
+            return self.get_action_display()
+        return None
+
+    def resolve_saving_goal_name(self, info):
+        if self.saving_goal:
+            return self.saving_goal.name
         return None
 
 
@@ -375,13 +387,15 @@ class CreateTransaction(graphene.Mutation):
         transaction_type = graphene.String(required=True)
         amount = graphene.String(required=True)
         category_id = graphene.ID()
+        saving_goal_id = graphene.ID()
+        action = graphene.String(default_value="none")
         note = graphene.String()
         date = graphene.String(required=True)
 
     transaction = graphene.Field(TransactionType)
 
     @classmethod
-    def mutate(cls, root, info, transaction_type, amount, date, category_id=None, note=""):
+    def mutate(cls, root, info, transaction_type, amount, date, category_id=None, saving_goal_id=None, action="none", note=""):
         user = require_auth(info)
         txn_amount = float(amount)
 
@@ -395,12 +409,21 @@ class CreateTransaction(graphene.Mutation):
                 category = Category.objects.get(pk=category_id)
             except Category.DoesNotExist:
                 pass
+
+        saving_goal = None
+        if saving_goal_id:
+            try:
+                saving_goal = SavingGoal.objects.get(pk=saving_goal_id, user=user)
+            except SavingGoal.DoesNotExist:
+                pass
+
         from datetime import datetime
         parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
         txn = Transaction.objects.create(
             user=user, amount=amount,
-            category=category, note=note, date=parsed_date,
-            **{'type': transaction_type},
+            category=category, saving_goal=saving_goal,
+            type=transaction_type, action=action,
+            note=note, date=parsed_date,
         )
 
         # Auto-generate notifications
@@ -417,6 +440,8 @@ class UpdateTransaction(graphene.Mutation):
         transaction_type = graphene.String()
         amount = graphene.String()
         category_id = graphene.ID()
+        saving_goal_id = graphene.ID()
+        action = graphene.String()
         note = graphene.String()
         date = graphene.String()
 
@@ -447,6 +472,13 @@ class UpdateTransaction(graphene.Mutation):
                 txn.category = Category.objects.get(pk=kwargs["category_id"])
             except Category.DoesNotExist:
                 txn.category = None
+        if "saving_goal_id" in kwargs and kwargs["saving_goal_id"] is not None:
+            try:
+                txn.saving_goal = SavingGoal.objects.get(pk=kwargs["saving_goal_id"], user=user)
+            except SavingGoal.DoesNotExist:
+                txn.saving_goal = None
+        if "action" in kwargs and kwargs["action"] is not None:
+            txn.action = kwargs["action"]
         if "note" in kwargs and kwargs["note"] is not None:
             txn.note = kwargs["note"]
         if "date" in kwargs and kwargs["date"] is not None:
@@ -486,21 +518,21 @@ class DeleteTransaction(graphene.Mutation):
 # ──── Helper: get-or-create Tiết Kiệm category ────
 
 def get_savings_category():
-    """Find or auto-create the Tiết Kiệm expense category."""
+    """Find or auto-create the Tiết Kiệm saving category."""
     cat = Category.objects.filter(
         name_vi__iexact="tiết kiệm",
-        type="expense"
+        type="saving"
     ).first()
     if not cat:
         cat = Category.objects.filter(
             name__iexact="savings",
-            type="expense"
+            type="saving"
         ).first()
     if not cat:
         cat = Category.objects.create(
             name="Savings",
             name_vi="Tiết Kiệm",
-            type="expense",
+            type="saving",
             sort_order=999,
         )
     return cat
@@ -509,11 +541,18 @@ def get_savings_category():
 # ──── Helper: calculate user balance from transactions ────
 
 def get_user_balance(user):
-    """Calculate current balance = total income - total expense from all transactions."""
+    """
+    Calculate current balance = total income - total expense - net saving.
+    Net saving = sum of SAVING(deposit) - sum of SAVING(withdraw) - sum of SAVING(close).
+    """
     from django.db.models import Sum
     income_sum = Transaction.objects.filter(user=user, type='income').aggregate(s=Sum('amount'))['s'] or 0
     expense_sum = Transaction.objects.filter(user=user, type='expense').aggregate(s=Sum('amount'))['s'] or 0
-    return float(income_sum) - float(expense_sum)
+    saving_deposit = Transaction.objects.filter(user=user, type='saving', action='deposit').aggregate(s=Sum('amount'))['s'] or 0
+    saving_withdraw = Transaction.objects.filter(user=user, type='saving', action='withdraw').aggregate(s=Sum('amount'))['s'] or 0
+    saving_close = Transaction.objects.filter(user=user, type='saving', action='close').aggregate(s=Sum('amount'))['s'] or 0
+    net_saving = float(saving_deposit) - float(saving_withdraw) - float(saving_close)
+    return float(income_sum) - float(expense_sum) - net_saving
 
 
 def check_expense_balance(user, expense_amount, exclude_txn_id=None):
@@ -610,9 +649,10 @@ class UpdateSavingGoal(graphene.Mutation):
 
 class DeleteSavingGoal(graphene.Mutation):
     """
-    Delete a saving goal.
-    If the goal still has money (current_amount > 0), it will first perform
-    a close-out (transfer remaining balance to income) before deleting.
+    Tất toán mục tiêu tiết kiệm.
+    - Chuyển toàn bộ số tiền về số dư khả dụng.
+    - Tạo Transaction SAVING + CLOSE (không phải INCOME).
+    - Đặt current_amount = 0 và đánh dấu is_completed = True.
     """
     class Arguments:
         id = graphene.ID(required=True)
@@ -631,21 +671,31 @@ class DeleteSavingGoal(graphene.Mutation):
             raise GraphQLError("Không tìm thấy mục tiêu tiết kiệm.") from exc
 
         remaining = float(goal.current_amount)
+
+        # Validation: Không cho phép tất toán nếu current_amount = 0
+        if remaining <= 0:
+            raise GraphQLError("Mục tiêu này không còn tiền để tất toán.")
+
         txn = None
 
-        # If there's remaining money, auto-close it first
-        if remaining > 0:
-            savings_category = get_savings_category()
-            txn = Transaction.objects.create(
-                user=user,
-                category=savings_category,
-                amount=remaining,
-                note=f"Tất toán mục tiêu tiết kiệm {goal.name}",
-                date=date.today(),
-                **{'type': 'income'},
-            )
+        # Tạo Transaction SAVING + CLOSE
+        savings_category = get_savings_category()
+        txn = Transaction.objects.create(
+            user=user,
+            category=savings_category,
+            saving_goal=goal,
+            amount=remaining,
+            note=f"Tất toán mục tiêu tiết kiệm {goal.name}",
+            date=date.today(),
+            type='saving',
+            action='close',
+        )
 
-        goal.delete()
+        # Đặt current_amount = 0, đánh dấu đã hoàn thành
+        goal.current_amount = 0
+        goal.is_completed = True
+        goal.save()
+
         return DeleteSavingGoal(ok=True, transaction=txn)
 
 
@@ -653,7 +703,7 @@ class DepositToGoal(graphene.Mutation):
     """
     Deposit money into a saving goal.
     Updates current_amount, auto-completes if target reached,
-    and creates an expense Transaction with Tiết Kiệm category.
+    and creates a SAVING Transaction with DEPOSIT action.
     """
     class Arguments:
         goal_id = graphene.ID(required=True)
@@ -673,8 +723,15 @@ class DepositToGoal(graphene.Mutation):
         if deposit_amount <= 0:
             raise GraphQLError("Số tiền nạp phải lớn hơn 0.")
 
-        # Validate balance: depositing into goal is an expense
-        check_expense_balance(user, deposit_amount)
+        # Validate that user has enough balance for this deposit
+        # Balance = income - expense - net_saving
+        balance = get_user_balance(user)
+        if float(deposit_amount) > balance:
+            formatted_balance = f"{balance:,.0f}₫"
+            raise GraphQLError(
+                f"Không thể nạp tiền. Số tiền nạp vượt quá số dư khả dụng. "
+                f"Số dư hiện tại: {formatted_balance}."
+            )
 
         # Use row-level locking + atomic transaction to prevent double-deposit
         # race conditions when the user clicks the button multiple times.
@@ -700,10 +757,12 @@ class DepositToGoal(graphene.Mutation):
             txn = Transaction.objects.create(
                 user=user,
                 category=savings_category,
+                saving_goal=goal,
                 amount=deposit_amount,
                 note=f"Nạp tiền vào mục tiêu {goal.name}",
                 date=date.today(),
-                **{'type': 'expense'},
+                type='saving',
+                action='deposit',
             )
 
         # Auto-generate notifications
@@ -717,8 +776,8 @@ class DepositToGoal(graphene.Mutation):
 class WithdrawFromGoal(graphene.Mutation):
     """
     Withdraw money from a saving goal.
-    Decreases current_amount and creates an INCOME Transaction
-    with Tiết Kiệm category so it reduces net savings in reports.
+    Decreases current_amount and creates a SAVING Transaction
+    with WITHDRAW action.
     """
     class Arguments:
         goal_id = graphene.ID(required=True)
@@ -765,10 +824,12 @@ class WithdrawFromGoal(graphene.Mutation):
         txn = Transaction.objects.create(
             user=user,
             category=savings_category,
+            saving_goal=goal,
             amount=withdraw_amount,
             note=txn_note,
             date=txn_date,
-            **{'type': 'income'},
+            type='saving',
+            action='withdraw',
         )
 
         # Auto-generate notification
@@ -1274,35 +1335,36 @@ class Query(graphene.ObjectType):
     def resolve_monthly_savings(self, info, year):
         """
         Calculate net savings per month using transaction data only.
-        Net savings = EXPENSE(Tiết Kiệm) - INCOME(Tiết Kiệm)
-        Both deposit (expense) and withdraw/close (income) use Tiết Kiệm category.
+        Net savings = sum of SAVING transactions (deposit - withdraw - close).
         """
         from django.db.models.functions import ExtractMonth
 
         user = require_auth(info)
-        savings_cat = get_savings_category()
-
         savings_txns = Transaction.objects.filter(
             user=user,
             date__year=year,
-            category=savings_cat,
+            type='saving',
         )
 
         monthly = {}
         for txn in savings_txns:
             m = txn.date.month
             if m not in monthly:
-                monthly[m] = {"month": m, "savings": 0.0, "deposit": 0.0, "withdraw": 0.0}
+                monthly[m] = {"month": m, "savings": 0.0, "deposit": 0.0, "withdraw": 0.0, "close": 0.0}
             amount = float(txn.amount)
 
-            if txn.type == 'expense':
+            if txn.action == 'deposit':
                 # Deposit into savings goal = adds to savings
                 monthly[m]["savings"] += amount
                 monthly[m]["deposit"] += amount
-            else:
-                # Withdraw or close from savings goal = reduces savings
+            elif txn.action == 'withdraw':
+                # Withdraw from savings goal = reduces savings
                 monthly[m]["savings"] -= amount
                 monthly[m]["withdraw"] += amount
+            elif txn.action == 'close':
+                # Close (tất toán) = reduces savings (money returned to balance)
+                monthly[m]["savings"] -= amount
+                monthly[m]["close"] += amount
 
         return [monthly[k] for k in sorted(monthly)]
 

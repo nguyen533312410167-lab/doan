@@ -1,9 +1,9 @@
-import { Table, Button, Modal, Form, Input, Select, DatePicker, Space, Row, Col, Card, message, ConfigProvider, theme } from "antd";
+import { Table, Button, Modal, Form, Input, Select, DatePicker, Space, Row, Col, Card, message, ConfigProvider, theme, Tag } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@apollo/client";
 import dayjs from "dayjs";
-import { TRANSACTIONS, CATEGORIES, CREATE_TRANSACTION, UPDATE_TRANSACTION, DELETE_TRANSACTION } from "../graphql/transactions.js";
+import { TRANSACTIONS, CATEGORIES, CREATE_TRANSACTION, UPDATE_TRANSACTION, DELETE_TRANSACTION, SAVING_GOALS } from "../graphql/transactions.js";
 import { useNotificationRefresh } from "../contexts/NotificationContext.jsx";
 
 export default function Transactions() {
@@ -12,27 +12,32 @@ export default function Transactions() {
   const [editingId, setEditingId] = useState(null);
   const [form] = Form.useForm();
   const [filterType, setFilterType] = useState("all");
+  const [filterAction, setFilterAction] = useState("all");
   const [searchText, setSearchText] = useState("");
   const [selectedType, setSelectedType] = useState(null);
 
   const { data: catData } = useQuery(CATEGORIES);
   const categories = catData?.categories || [];
-  console.log("Categories:", categories);
+
+  const { data: goalsData } = useQuery(SAVING_GOALS);
+  const savingGoals = goalsData?.savingGoals || [];
 
   const categoryOptions = useMemo(() => {
-  if (!selectedType) return [];
+    if (!selectedType) return [];
+    return categories
+      .filter((c) => c.type?.toLowerCase() === selectedType?.toLowerCase())
+      .map((c) => ({
+        value: c.id,
+        label: c.nameVi || c.name,
+      }));
+  }, [categories, selectedType]);
 
-  return categories
-    .filter(
-      (c) =>
-        c.type?.toLowerCase() ===
-        selectedType?.toLowerCase()
-    )
-    .map((c) => ({
-      value: c.id,
-      label: c.nameVi || c.name,
+  const savingGoalOptions = useMemo(() => {
+    return savingGoals.map((g) => ({
+      value: g.id,
+      label: g.name,
     }));
-}, [categories, selectedType]);
+  }, [savingGoals]);
 
   const { data: txnData, loading, refetch } = useQuery(TRANSACTIONS, {
     variables: { search: searchText || undefined },
@@ -69,6 +74,8 @@ export default function Transactions() {
       type: record.type,
       amount: parseFloat(record.amount),
       categoryId: record.category?.id || undefined,
+      action: record.action || "none",
+      savingGoalId: undefined,
       note: record.note,
       date: dayjs(record.date),
     });
@@ -95,6 +102,8 @@ export default function Transactions() {
         amount: String(values.amount),
         date: values.date.format("YYYY-MM-DD"),
         categoryId: values.categoryId || undefined,
+        savingGoalId: values.type === "saving" ? (values.savingGoalId || undefined) : undefined,
+        action: values.type === "saving" ? (values.action || "none") : "none",
         note: values.note || "",
       };
       if (editingId !== null) {
@@ -111,15 +120,14 @@ export default function Transactions() {
     }
   };
 
- const handleTypeChange = (value) => {
-  console.log("Selected Type:", value);
-
-  setSelectedType(value);
-
-  form.setFieldsValue({
-    categoryId: undefined,
-  });
-};
+  const handleTypeChange = (value) => {
+    setSelectedType(value);
+    form.setFieldsValue({
+      categoryId: undefined,
+      action: value === "saving" ? "deposit" : "none",
+      savingGoalId: undefined,
+    });
+  };
 
   const handleCancel = () => {
     setIsModalOpen(false);
@@ -131,7 +139,8 @@ export default function Transactions() {
         const text = searchText.toLowerCase();
         return (
           (t.note || "").toLowerCase().includes(text) ||
-          (t.categoryName || "").toLowerCase().includes(text)
+          (t.categoryName || "").toLowerCase().includes(text) ||
+          (t.savingGoalName || "").toLowerCase().includes(text)
         );
       })
     : transactions;
@@ -143,6 +152,10 @@ export default function Transactions() {
           (t) => t.type?.toLowerCase() === filterType.toLowerCase()
         );
 
+  const finalTransactions = filterType === "saving" && filterAction !== "all"
+    ? displayTransactions.filter((t) => t.action?.toLowerCase() === filterAction.toLowerCase())
+    : displayTransactions;
+
   const columns = [
     {
       title: "Ngày",
@@ -152,10 +165,44 @@ export default function Transactions() {
       render: (date) => dayjs(date).format("DD/MM/YYYY"),
     },
     {
+      title: "Loại",
+      dataIndex: "type",
+      key: "type",
+      render: (type) => {
+        if (["income", "INCOME"].includes(type)) return <Tag color="green">Thu nhập</Tag>;
+        if (["expense", "EXPENSE"].includes(type)) return <Tag color="red">Chi tiêu</Tag>;
+        if (["saving", "SAVING"].includes(type)) return <Tag color="blue">Tiết kiệm</Tag>;
+        return type;
+      },
+      filters: [
+        { text: "Thu nhập", value: "income" },
+        { text: "Chi tiêu", value: "expense" },
+        { text: "Tiết kiệm", value: "saving" },
+      ],
+      onFilter: (value, record) => record.type === value,
+    },
+    {
+      title: "Hành động",
+      dataIndex: "action",
+      key: "action",
+      render: (action, record) => {
+        if (record.type !== "saving" && record.type !== "SAVING") return <span style={{ color: "#94a3b8" }}>-</span>;
+        const display = record.actionDisplay || (action === "deposit" ? "Nạp tiền" : action === "withdraw" ? "Rút tiền" : action === "close" ? "Tất toán" : "");
+        const color = action === "deposit" ? "#22c55e" : action === "withdraw" ? "#faad14" : action === "close" ? "#ff4d4f" : "#94a3b8";
+        return <span style={{ color }}>{display}</span>;
+      },
+    },
+    {
       title: "Danh Mục",
       dataIndex: "categoryName",
       key: "categoryName",
       render: (name) => name || "Khác",
+    },
+    {
+      title: "Mục tiêu",
+      dataIndex: "savingGoalName",
+      key: "savingGoalName",
+      render: (name) => name ? <span style={{ color: "#1890ff" }}>{name}</span> : <span style={{ color: "#94a3b8" }}>-</span>,
     },
     {
       title: "Ghi Chú",
@@ -163,38 +210,31 @@ export default function Transactions() {
       key: "note",
     },
     {
-      title: "Loại",
-      dataIndex: "type",
-      key: "type",
-      render: (type) =>
-        ["income", "INCOME"].includes(type) ? "Thu nhập" : "Chi tiêu",
-      filters: [
-        { text: "Thu nhập", value: "income" },
-        { text: "Chi tiêu", value: "expense" },
-      ],
-      onFilter: (value, record) => record.type === value,
-    },
-    {
       title: "Số Tiền",
       dataIndex: "amount",
       key: "amount",
       sorter: (a, b) => parseFloat(a.amount) - parseFloat(b.amount),
-      render: (amount, record) => (
-        <span
-          style={{
-            color: ["income", "INCOME"].includes(record.type)
-              ? "#52c41a"
-              : "#f5222d",
-          }}
-        >
-          {["income", "INCOME"].includes(record.type) ? "+" : "-"}
-          {parseFloat(amount).toLocaleString("vi-VN")} ₫
-        </span>
-      ),
+      render: (amount, record) => {
+        let color = "#f5222d";
+        let prefix = "-";
+        if (["income", "INCOME"].includes(record.type)) {
+          color = "#52c41a";
+          prefix = "+";
+        } else if (["saving", "SAVING"].includes(record.type)) {
+          color = "#1890ff";
+          prefix = "";
+        }
+        return (
+          <span style={{ color, fontWeight: 600 }}>
+            {prefix}
+            {parseFloat(amount).toLocaleString("vi-VN")} ₫
+          </span>
+        );
+      },
     },
     {
-      title: "Hành Động",
-      key: "action",
+      title: "Thao tác",
+      key: "actionButtons",
       render: (_, record) => (
         <Space>
           <Button type="primary" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>Sửa</Button>
@@ -263,38 +303,54 @@ export default function Transactions() {
           }}
         >
           <Row gutter={[16, 16]} style={{ marginBottom: "16px" }}>
-            <Col xs={24} sm={12} md={6}>
+            <Col xs={24} sm={12} md={4}>
               <Input.Search
-                placeholder="Tìm kiếm ghi chú hoặc danh mục"
+                placeholder="Tìm kiếm..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 onSearch={() => refetch()}
               />
             </Col>
-            <Col xs={24} sm={12} md={6}>
+            <Col xs={24} sm={12} md={4}>
               <Select
                 value={filterType}
-                onChange={setFilterType}
+                onChange={(val) => { setFilterType(val); setFilterAction("all"); }}
                 style={{ width: "100%" }}
                 options={[
                   { label: "Tất cả", value: "all" },
                   { label: "Thu nhập", value: "income" },
                   { label: "Chi tiêu", value: "expense" },
+                  { label: "Tiết kiệm", value: "saving" },
                 ]}
               />
             </Col>
-            <Col xs={24} sm={12} md={12} style={{ textAlign: "right" }}>
+            {filterType === "saving" && (
+              <Col xs={24} sm={12} md={4}>
+                <Select
+                  value={filterAction}
+                  onChange={setFilterAction}
+                  style={{ width: "100%" }}
+                  options={[
+                    { label: "Tất cả", value: "all" },
+                    { label: "Nạp tiền", value: "deposit" },
+                    { label: "Rút tiền", value: "withdraw" },
+                    { label: "Tất toán", value: "close" },
+                  ]}
+                />
+              </Col>
+            )}
+            <Col xs={24} sm={12} md={filterType === "saving" ? 12 : 12} style={{ textAlign: "right" }}>
               <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>Thêm Giao Dịch</Button>
             </Col>
           </Row>
 
           <Table
             columns={columns}
-            dataSource={displayTransactions}
+            dataSource={finalTransactions}
             rowKey="id"
             loading={loading}
             pagination={{ pageSize: 10, showSizeChanger: true }}
-            scroll={{ x: 768 }}
+            scroll={{ x: 992 }}
           />
         </Card>
 
@@ -322,9 +378,31 @@ export default function Transactions() {
                 options={[
                   { label: "Thu nhập", value: "income" },
                   { label: "Chi tiêu", value: "expense" },
+                  { label: "Tiết kiệm", value: "saving" },
                 ]}
               />
             </Form.Item>
+
+            {selectedType === "saving" && (
+              <>
+                <Form.Item label="Hành động" name="action" rules={[{ required: true, message: "Chọn hành động" }]}>
+                  <Select
+                    placeholder="Chọn hành động"
+                    options={[
+                      { label: "Nạp tiền", value: "deposit" },
+                      { label: "Rút tiền", value: "withdraw" },
+                    ]}
+                  />
+                </Form.Item>
+                <Form.Item label="Mục tiêu tiết kiệm" name="savingGoalId">
+                  <Select
+                    placeholder="Chọn mục tiêu (nếu có)"
+                    allowClear
+                    options={savingGoalOptions}
+                  />
+                </Form.Item>
+              </>
+            )}
 
             <Form.Item label="Số Tiền" name="amount" rules={[{ required: true, message: "Nhập số tiền" }]}>
               <Input type="number" placeholder="0" min={0} />

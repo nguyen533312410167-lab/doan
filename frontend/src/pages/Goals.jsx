@@ -30,7 +30,7 @@ export default function Goals() {
       const txn = data.deleteSavingGoal.transaction;
       if (txn) {
         messageApi.success(
-          `Đã tất toán ${parseFloat(txn.amount).toLocaleString("vi-VN")}₫ và xóa mục tiêu!`
+          `Đã tất toán ${parseFloat(txn.amount).toLocaleString("vi-VN")}₫. Tiền đã được hoàn về số dư.`
         );
       } else {
         messageApi.success("Đã xóa mục tiêu!");
@@ -106,7 +106,7 @@ export default function Goals() {
     const remaining = parseFloat(goal.currentAmount);
     let message = "Bạn có chắc muốn xóa mục tiêu này?";
     if (remaining > 0) {
-      message = `Mục tiêu còn ${remaining.toLocaleString("vi-VN")}₫. Hệ thống sẽ tự động tất toán (chuyển thành thu nhập) trước khi xóa. Tiếp tục?`;
+      message = `Mục tiêu còn ${remaining.toLocaleString("vi-VN")}₫. Hệ thống sẽ tất toán (hoàn tiền về số dư) và đánh dấu mục tiêu đã hoàn thành. Tiếp tục?`;
     }
     Modal.confirm({
       title: "Tất toán / Xóa mục tiêu",
@@ -519,7 +519,7 @@ export default function Goals() {
               }}
             >
               <span style={{ color: "#94a3b8", fontSize: 13 }}>
-                💡 Khi nạp tiền, hệ thống sẽ tự động tạo một giao dịch chi tiêu và xuất hiện trong Quản lý giao dịch & Dashboard.
+                💡 Khi nạp tiền, hệ thống sẽ tự động tạo một giao dịch tiết kiệm (Saving) và xuất hiện trong Quản lý giao dịch & Dashboard.
               </span>
             </div>
           </Form>
@@ -632,7 +632,7 @@ export default function Goals() {
               }}
             >
               <span style={{ color: "#94a3b8", fontSize: 13 }}>
-                💡 Khi rút tiền, hệ thống sẽ tự động tạo một giao dịch thu nhập (INCOME) và giảm số dư tiết kiệm trên Dashboard.
+                💡 Khi rút tiền, hệ thống sẽ tự động tạo một giao dịch tiết kiệm (Saving) với hành động Rút tiền và giảm số dư tiết kiệm trên Dashboard.
               </span>
             </div>
           </Form>

@@ -7,6 +7,7 @@ import { useNotificationRefresh } from "../contexts/NotificationContext.jsx";
 
 const { Title } = Typography;
 const { TextArea } = Input;
+const { Option } = Select;
 
 export default function AddTransactionPage() {
   const [messageApi, contextHolder] = message.useMessage();
@@ -46,6 +47,8 @@ export default function AddTransactionPage() {
           amount: String(values.amount),
           date: values.date.format("YYYY-MM-DD"),
           categoryId: values.categoryId || undefined,
+          savingGoalId: values.savingGoalId || undefined,
+          action: values.type === "saving" ? (values.action || "none") : "none",
           note: values.note || "",
         },
       });
@@ -62,7 +65,7 @@ export default function AddTransactionPage() {
 
   const handleTypeChange = (value) => {
     setSelectedType(value);
-    form.setFieldsValue({ categoryId: undefined });
+    form.setFieldsValue({ categoryId: undefined, action: "none" });
   };
 
   return (
@@ -116,9 +119,26 @@ export default function AddTransactionPage() {
               options={[
                 { value: "income", label: "Thu nhập" },
                 { value: "expense", label: "Chi tiêu" },
+                { value: "saving", label: "Tiết kiệm" },
               ]}
             />
           </Form.Item>
+
+          {selectedType === "saving" && (
+            <Form.Item
+              label={<span style={{ color: "#FFFFFF" }}>Hành động</span>}
+              name="action"
+              rules={[{ required: true, message: "Vui lòng chọn hành động" }]}
+            >
+              <Select
+                placeholder="Chọn hành động"
+                options={[
+                  { value: "deposit", label: "Nạp tiền" },
+                  { value: "withdraw", label: "Rút tiền" },
+                ]}
+              />
+            </Form.Item>
+          )}
 
           <Form.Item
             label={<span style={{ color: "#FFFFFF" }}>Số tiền</span>}

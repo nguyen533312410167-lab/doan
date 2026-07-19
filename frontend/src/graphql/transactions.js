@@ -18,10 +18,13 @@ export const TRANSACTIONS = gql`
     transactions(type: $type, categoryId: $categoryId, month: $month, year: $year, search: $search, limit: $limit, offset: $offset) {
       id
       type
+      action
+      actionDisplay
       amount
       note
       date
       categoryName
+      savingGoalName
       category {
         id
         nameVi
@@ -33,15 +36,17 @@ export const TRANSACTIONS = gql`
 `;
 
 export const CREATE_TRANSACTION = gql`
-  mutation CreateTransaction($transactionType: String!, $amount: String!, $date: String!, $categoryId: ID, $note: String) {
-    createTransaction(transactionType: $transactionType, amount: $amount, date: $date, categoryId: $categoryId, note: $note) {
+  mutation CreateTransaction($transactionType: String!, $amount: String!, $date: String!, $categoryId: ID, $savingGoalId: ID, $action: String, $note: String) {
+    createTransaction(transactionType: $transactionType, amount: $amount, date: $date, categoryId: $categoryId, savingGoalId: $savingGoalId, action: $action, note: $note) {
       transaction {
         id
         type
+        action
         amount
         note
         date
         categoryName
+        savingGoalName
         category {
           id
           nameVi
@@ -52,15 +57,17 @@ export const CREATE_TRANSACTION = gql`
 `;
 
 export const UPDATE_TRANSACTION = gql`
-  mutation UpdateTransaction($id: ID!, $transactionType: String, $amount: String, $date: String, $categoryId: ID, $note: String) {
-    updateTransaction(id: $id, transactionType: $transactionType, amount: $amount, date: $date, categoryId: $categoryId, note: $note) {
+  mutation UpdateTransaction($id: ID!, $transactionType: String, $amount: String, $date: String, $categoryId: ID, $savingGoalId: ID, $action: String, $note: String) {
+    updateTransaction(id: $id, transactionType: $transactionType, amount: $amount, date: $date, categoryId: $categoryId, savingGoalId: $savingGoalId, action: $action, note: $note) {
       transaction {
         id
         type
+        action
         amount
         note
         date
         categoryName
+        savingGoalName
         category {
           id
           nameVi
@@ -81,5 +88,21 @@ export const DELETE_TRANSACTION = gql`
 export const MONTHLY_STATS = gql`
   query MonthlyStats($year: Int!) {
     monthlyStats(year: $year)
+  }
+`;
+
+export const SAVING_GOALS = gql`
+  query SavingGoals {
+    savingGoals {
+      id
+      name
+      targetAmount
+      currentAmount
+      dueDate
+      note
+      isCompleted
+      progressPercent
+      daysLeft
+    }
   }
 `;

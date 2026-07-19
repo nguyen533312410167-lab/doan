@@ -31,6 +31,18 @@ class Command(BaseCommand):
             ("other_income", "Khác", "income", "ellipsis", 99),
         ]
 
+        # Saving categories
+        saving_categories_data = [
+            ("emergency_fund", "Quỹ khẩn cấp", "saving", "safety", 1),
+            ("car_purchase", "Mua xe", "saving", "car", 2),
+            ("house_purchase", "Mua nhà", "saving", "home", 3),
+            ("travel", "Du lịch", "saving", "compass", 4),
+            ("investment", "Đầu tư", "saving", "rise", 5),
+            ("education", "Học tập", "saving", "book", 6),
+            ("other_saving", "Khác", "saving", "ellipsis", 99),
+        ]
+        categories_data.extend(saving_categories_data)
+
         created_count = 0
         for name, name_vi, typ, icon, sort_order in categories_data:
             _, created = Category.objects.get_or_create(
@@ -44,6 +56,16 @@ class Command(BaseCommand):
             )
             if created:
                 created_count += 1
+
+        # Ensure there is at least one Saving category for transactions
+        if not Category.objects.filter(type="saving").exists():
+            Category.objects.create(
+                name="Savings",
+                name_vi="Tiết Kiệm",
+                type="saving",
+                icon="dollar",
+                sort_order=999,
+            )
 
         self.stdout.write(f"  Created {created_count} categories")
 

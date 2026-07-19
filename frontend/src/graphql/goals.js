@@ -61,6 +61,7 @@ export const DELETE_SAVING_GOAL = gql`
         note
         date
         type
+        action
         categoryName
       }
     }
@@ -118,6 +119,7 @@ export const MONTHLY_SAVINGS = gql`
       savings
       deposit
       withdraw
+      close
     }
   }
 `;

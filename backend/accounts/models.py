@@ -22,6 +22,7 @@ class Category(models.Model):
     CATEGORY_TYPES = [
         ("income", "Thu nhập"),
         ("expense", "Chi tiêu"),
+        ("saving", "Tiết kiệm"),
     ]
     name = models.CharField(max_length=64)
     name_vi = models.CharField(max_length=64, blank=True)
@@ -43,10 +44,19 @@ class Transaction(models.Model):
     TRANSACTION_TYPES = [
         ("income", "Thu nhập"),
         ("expense", "Chi tiêu"),
+        ("saving", "Tiết kiệm"),
+    ]
+    ACTION_TYPES = [
+        ("deposit", "Nạp tiền"),
+        ("withdraw", "Rút tiền"),
+        ("close", "Tất toán"),
+        ("none", "Không có"),
     ]
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="transactions")
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True, related_name="transactions")
+    saving_goal = models.ForeignKey("SavingGoal", on_delete=models.SET_NULL, null=True, blank=True, related_name="transactions")
     type = models.CharField(max_length=16, choices=TRANSACTION_TYPES)
+    action = models.CharField(max_length=16, choices=ACTION_TYPES, default="none")
     amount = models.DecimalField(max_digits=15, decimal_places=0)
     note = models.TextField(blank=True)
     date = models.DateField()
