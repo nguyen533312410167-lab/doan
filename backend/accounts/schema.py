@@ -397,11 +397,10 @@ class CreateTransaction(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, transaction_type, amount, date, category_id=None, saving_goal_id=None, action="none", note=""):
         user = require_auth(info)
-        txn_amount = float(amount)
 
         # Validate balance for expense transactions
         if transaction_type == 'expense':
-            check_expense_balance(user, txn_amount)
+            check_expense_balance(user, amount)
 
         category = None
         if category_id:
@@ -457,10 +456,10 @@ class UpdateTransaction(graphene.Mutation):
 
         # Determine new type and amount for balance validation
         new_type = kwargs.get("transaction_type", txn.type)
-        new_amount = float(kwargs.get("amount", txn.amount))
+        new_amount = kwargs.get("amount") if "amount" in kwargs else None
 
         # Check balance if this is/will be an expense transaction
-        if new_type == 'expense':
+        if new_type == 'expense' and new_amount is not None:
             check_expense_balance(user, new_amount, exclude_txn_id=id)
 
         if "transaction_type" in kwargs and kwargs["transaction_type"] is not None:
@@ -544,15 +543,17 @@ def get_user_balance(user):
     """
     Calculate current balance = total income - total expense - net saving.
     Net saving = sum of SAVING(deposit) - sum of SAVING(withdraw) - sum of SAVING(close).
+    All amounts are Decimal; returns Decimal.
     """
+    from decimal import Decimal
     from django.db.models import Sum
-    income_sum = Transaction.objects.filter(user=user, type='income').aggregate(s=Sum('amount'))['s'] or 0
-    expense_sum = Transaction.objects.filter(user=user, type='expense').aggregate(s=Sum('amount'))['s'] or 0
-    saving_deposit = Transaction.objects.filter(user=user, type='saving', action='deposit').aggregate(s=Sum('amount'))['s'] or 0
-    saving_withdraw = Transaction.objects.filter(user=user, type='saving', action='withdraw').aggregate(s=Sum('amount'))['s'] or 0
-    saving_close = Transaction.objects.filter(user=user, type='saving', action='close').aggregate(s=Sum('amount'))['s'] or 0
-    net_saving = float(saving_deposit) - float(saving_withdraw) - float(saving_close)
-    return float(income_sum) - float(expense_sum) - net_saving
+    income_sum = Transaction.objects.filter(user=user, type='income').aggregate(s=Sum('amount'))['s'] or Decimal('0')
+    expense_sum = Transaction.objects.filter(user=user, type='expense').aggregate(s=Sum('amount'))['s'] or Decimal('0')
+    saving_deposit = Transaction.objects.filter(user=user, type='saving', action='deposit').aggregate(s=Sum('amount'))['s'] or Decimal('0')
+    saving_withdraw = Transaction.objects.filter(user=user, type='saving', action='withdraw').aggregate(s=Sum('amount'))['s'] or Decimal('0')
+    saving_close = Transaction.objects.filter(user=user, type='saving', action='close').aggregate(s=Sum('amount'))['s'] or Decimal('0')
+    net_saving = saving_deposit - saving_withdraw - saving_close
+    return income_sum - expense_sum - net_saving
 
 
 def check_expense_balance(user, expense_amount, exclude_txn_id=None):
@@ -561,7 +562,10 @@ def check_expense_balance(user, expense_amount, exclude_txn_id=None):
     If exclude_txn_id is provided, exclude that transaction from balance calc (for updates).
     Raises GraphQLError if balance would go negative.
     """
-    if float(expense_amount) <= 0:
+    from decimal import Decimal
+    expense_amount = Decimal(str(expense_amount))
+
+    if expense_amount <= 0:
         return  # Skip check for zero/negative amounts (handled elsewhere)
 
     balance = get_user_balance(user)
@@ -571,18 +575,17 @@ def check_expense_balance(user, expense_amount, exclude_txn_id=None):
         try:
             old_txn = Transaction.objects.get(pk=exclude_txn_id, user=user)
             if old_txn.type == 'expense':
-                balance += float(old_txn.amount)
+                balance += Decimal(str(old_txn.amount))
         except Transaction.DoesNotExist:
             pass
 
-    if float(balance) < float(expense_amount):
-        formatted_balance = f"{balance:,.0f}₫"
+    if balance < expense_amount:
+        formatted_balance = f"{float(balance):,.0f}₫"
         raise GraphQLError(
             f"Số dư hiện tại không đủ để thực hiện giao dịch này. "
             f"Số dư: {formatted_balance}. "
             f"Vui lòng giảm số tiền hoặc thêm thu nhập."
         )
-
 
 # ──── Saving Goal Mutations ────
 
@@ -649,10 +652,16 @@ class UpdateSavingGoal(graphene.Mutation):
 
 class DeleteSavingGoal(graphene.Mutation):
     """
-    Tất toán mục tiêu tiết kiệm.
-    - Chuyển toàn bộ số tiền về số dư khả dụng.
-    - Tạo Transaction SAVING + CLOSE (không phải INCOME).
-    - Đặt current_amount = 0 và đánh dấu is_completed = True.
+    Tất toán / Xóa mục tiêu tiết kiệm.
+
+    Trường hợp 1: Mục tiêu có tiền (current_amount > 0)
+      - Tạo Transaction SAVING + CLOSE để hoàn tiền về số dư.
+      - Xóa Saving Goal khỏi database.
+      - Transaction lịch sử được giữ lại (saving_goal → NULL nhờ SET_NULL).
+
+    Trường hợp 2: Mục tiêu không có tiền (current_amount = 0)
+      - Chỉ xóa Saving Goal.
+      - Không tạo Transaction.
     """
     class Arguments:
         id = graphene.ID(required=True)
@@ -663,6 +672,7 @@ class DeleteSavingGoal(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, id):
         from datetime import date
+        from decimal import Decimal
 
         user = require_auth(info)
         try:
@@ -670,31 +680,26 @@ class DeleteSavingGoal(graphene.Mutation):
         except SavingGoal.DoesNotExist as exc:
             raise GraphQLError("Không tìm thấy mục tiêu tiết kiệm.") from exc
 
-        remaining = float(goal.current_amount)
-
-        # Validation: Không cho phép tất toán nếu current_amount = 0
-        if remaining <= 0:
-            raise GraphQLError("Mục tiêu này không còn tiền để tất toán.")
-
+        remaining = goal.current_amount  # Decimal
         txn = None
 
-        # Tạo Transaction SAVING + CLOSE
-        savings_category = get_savings_category()
-        txn = Transaction.objects.create(
-            user=user,
-            category=savings_category,
-            saving_goal=goal,
-            amount=remaining,
-            note=f"Tất toán mục tiêu tiết kiệm {goal.name}",
-            date=date.today(),
-            type='saving',
-            action='close',
-        )
+        # Trường hợp 1: Mục tiêu có tiền → tất toán (tạo CLOSE transaction rồi xóa)
+        if remaining > Decimal('0'):
+            savings_category = get_savings_category()
+            txn = Transaction.objects.create(
+                user=user,
+                category=savings_category,
+                saving_goal=goal,
+                amount=remaining,
+                note=f"Tất toán mục tiêu tiết kiệm {goal.name}",
+                date=date.today(),
+                type='saving',
+                action='close',
+            )
 
-        # Đặt current_amount = 0, đánh dấu đã hoàn thành
-        goal.current_amount = 0
-        goal.is_completed = True
-        goal.save()
+        # Xóa Saving Goal khỏi database
+        # Transaction.saving_goal sẽ tự động thành NULL nhờ on_delete=SET_NULL
+        goal.delete()
 
         return DeleteSavingGoal(ok=True, transaction=txn)
 
@@ -726,8 +731,8 @@ class DepositToGoal(graphene.Mutation):
         # Validate that user has enough balance for this deposit
         # Balance = income - expense - net_saving
         balance = get_user_balance(user)
-        if float(deposit_amount) > balance:
-            formatted_balance = f"{balance:,.0f}₫"
+        if deposit_amount > balance:
+            formatted_balance = f"{float(balance):,.0f}₫"
             raise GraphQLError(
                 f"Không thể nạp tiền. Số tiền nạp vượt quá số dư khả dụng. "
                 f"Số dư hiện tại: {formatted_balance}."
@@ -791,11 +796,12 @@ class WithdrawFromGoal(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, goal_id, amount, date=None, note=""):
         from datetime import date as date_func
+        from decimal import Decimal
 
         user = require_auth(info)
-        withdraw_amount = float(amount)
+        withdraw_amount = Decimal(amount)
 
-        if withdraw_amount <= 0:
+        if withdraw_amount <= Decimal('0'):
             raise GraphQLError("Số tiền rút phải lớn hơn 0.")
 
         try:
@@ -803,13 +809,13 @@ class WithdrawFromGoal(graphene.Mutation):
         except SavingGoal.DoesNotExist as exc:
             raise GraphQLError("Không tìm thấy mục tiêu tiết kiệm.") from exc
 
-        if float(goal.current_amount) < withdraw_amount:
+        if goal.current_amount < withdraw_amount:
             raise GraphQLError(
                 f"Số dư hiện tại chỉ có {float(goal.current_amount):,.0f}₫. "
-                f"Không thể rút {withdraw_amount:,.0f}₫."
+                f"Không thể rút {float(withdraw_amount):,.0f}₫."
             )
 
-        goal.current_amount = float(goal.current_amount) - withdraw_amount
+        goal.current_amount -= withdraw_amount
         goal.save()
 
         savings_category = get_savings_category()
@@ -833,7 +839,7 @@ class WithdrawFromGoal(graphene.Mutation):
         )
 
         # Auto-generate notification
-        notify_goal_withdraw(user, goal, withdraw_amount)
+        notify_goal_withdraw(user, goal, float(withdraw_amount))
 
         return WithdrawFromGoal(saving_goal=goal, transaction=txn)
 
