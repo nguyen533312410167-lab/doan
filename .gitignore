@@ -1,13 +1,32 @@
 .DS_Store
+
+# Python
 *.pyc
 __pycache__/
 .pytest_cache/
 db.sqlite3
+
+# Django
 media/
 staticfiles/
+
+# Frontend
 node_modules/
+frontend_node_modules/
 dist/
 .vite/
-frontend_node_modules/
+
+# PostgreSQL data
 _db/
 
+# macOS
+__MACOSX/
+
+# Logs
+*.log
+
+# Old backup
+database_backup.json
+
+# Test restore folder
+test_restore/
