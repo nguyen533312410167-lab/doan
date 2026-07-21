@@ -10,7 +10,8 @@ import {
   ConfigProvider,
   theme,
   InputNumber,
-  Alert
+  Alert,
+  Tag
 } from "antd";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { useState, useEffect, useCallback } from "react";
@@ -129,7 +130,7 @@ export default function Dashboard() {
     try {
       setLoading(true);
       const result = await graphqlRequest(
-        `query T($year: Int!) { transactions(year: $year) { id type action amount date categoryName } }`,
+        `query T($year: Int!) { transactions(year: $year) { id type action amount date categoryName savingGoalName } }`,
         { year: currentYear }
       );
       if (result.data?.transactions) {
@@ -247,8 +248,15 @@ export default function Dashboard() {
     },
     {
       title: "Danh mục",
-      dataIndex: "categoryName",
-      key: "categoryName",
+      key: "category",
+      render: (_, record) => {
+        const t = (record.type || "").toLowerCase();
+        if (t === "saving") {
+          // Hiển thị tên mục tiêu tiết kiệm thay vì tên danh mục
+          return record.savingGoalName || record.categoryName || "Tiết kiệm";
+        }
+        return record.categoryName || "Khác";
+      },
     },
     {
       title: "Loại",
@@ -259,6 +267,19 @@ export default function Dashboard() {
         if (t === "expense") return "Chi tiêu";
         if (t === "saving") return "Tiết kiệm";
         return record.type;
+      },
+    },
+    {
+      title: "Hành động",
+      key: "action",
+      render: (_, record) => {
+        const t = (record.type || "").toLowerCase();
+        if (t !== "saving") return <span style={{ color: "#94a3b8" }}>—</span>;
+        const action = (record.action || "").toLowerCase();
+        if (action === "deposit") return <Tag color="green" style={{ margin: 0 }}>Nạp</Tag>;
+        if (action === "withdraw") return <Tag color="orange" style={{ margin: 0 }}>Rút</Tag>;
+        if (action === "close") return <Tag color="red" style={{ margin: 0 }}>Tất toán</Tag>;
+        return <Tag color="blue" style={{ margin: 0 }}>Tiết kiệm</Tag>;
       },
     },
     {

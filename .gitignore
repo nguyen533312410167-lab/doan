@@ -1,5 +1,4 @@
 .DS_Store
-.env
 *.pyc
 __pycache__/
 .pytest_cache/
@@ -10,4 +9,5 @@ node_modules/
 dist/
 .vite/
 frontend_node_modules/
+_db/
 

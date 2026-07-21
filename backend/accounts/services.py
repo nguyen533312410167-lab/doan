@@ -141,6 +141,21 @@ def notify_new_income(user, transaction):
     )
 
 
+def notify_goal_close(user, goal, amount):
+    """
+    Gửi thông báo khi User tất toán mục tiêu tiết kiệm.
+    """
+    Notification.objects.create(
+        user=user,
+        title="Tất toán mục tiêu tiết kiệm",
+        message=f"Đã tất toán mục tiêu \"{goal.name}\", {amount:,.0f}₫ đã được hoàn về số dư.",
+        type="system",
+        category="success",
+        sender="Hệ thống",
+        link="/goals",
+    )
+
+
 def notify_check_goal_completion(user, goal):
     """
     Kiểm tra nếu goal vừa hoàn thành thì gửi thông báo.

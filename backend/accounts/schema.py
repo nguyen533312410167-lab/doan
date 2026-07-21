@@ -16,6 +16,7 @@ from .services import (
     notify_goal_created,
     notify_goal_deposit,
     notify_goal_withdraw,
+    notify_goal_close,
     notify_check_goal_completion,
     notify_new_income,
 )
@@ -696,6 +697,8 @@ class DeleteSavingGoal(graphene.Mutation):
                 type='saving',
                 action='close',
             )
+            # Tạo notification trên Header
+            notify_goal_close(user, goal, float(remaining))
 
         # Xóa Saving Goal khỏi database
         # Transaction.saving_goal sẽ tự động thành NULL nhờ on_delete=SET_NULL
